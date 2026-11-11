@@ -44,6 +44,9 @@
         /** Preferred external JWT debugger link: "jwt.ms" | "jwt.io" */
         EXTERNAL_DEBUGGER: userConfig.externalDebugger === "jwt.io" ? "jwt.io" : "jwt.ms",
 
+        /** Activity Bar sort order priority (lower values on top; defaults to 5 for 1st position) */
+        ACTIVITY_BAR_ORDER: typeof userConfig.activityBarOrder === "number" ? userConfig.activityBarOrder : 5,
+
         /** Fallback localStorage keys to inspect for tokens */
         FALLBACK_STORAGE_KEYS: Array.isArray(userConfig.tokenStorageKeys) ? userConfig.tokenStorageKeys : [],
 
@@ -1143,7 +1146,6 @@
 
         if (changed) {
             renderStatusBar();
-            updateActivityBarButton();
 
             // If modal is currently open, refresh its content
             const openModalCard = document.querySelector(`#${CONFIG.MODAL_ELEMENT_ID} .jwt-modal-card`);
@@ -1190,7 +1192,6 @@
                     if (countdownIntervalId === null) {
                         countdownIntervalId = window.setInterval(() => {
                             renderStatusBar();
-                            updateActivityBarButton();
                         }, CONFIG.COUNTDOWN_TICK_INTERVAL_MS);
                     }
 
@@ -1199,7 +1200,6 @@
                     window.addEventListener("swagger-activity-bar:ready", () => {
                         registerInActivityBar();
                         registerGuideDocumentation(true);
-                        updateActivityBarButton();
                     });
                     window.addEventListener("swagger-i18n:locale-changed", () => {
                         registerGuideDocumentation(true);
@@ -1247,24 +1247,18 @@
             `,
             onClick: () => toggleInspectorModal(),
             section: "top",
-            order: 25
+            order: CONFIG.ACTIVITY_BAR_ORDER
         });
-        updateActivityBarButton();
     }
 
     /**
-     * Updates Activity Bar item title/tooltip with active user and remaining time.
+     * Updates Activity Bar item title/tooltip (e.g. on locale change).
      */
     function updateActivityBarButton() {
         if (!window.SwaggerActivityBar || typeof window.SwaggerActivityBar.updateItem !== "function") return;
-        const currentPayload = activePayloads.bearer || activePayloads.msal;
-        let title = t("activityBarTitle", "JWT Claims & Token Inspector");
-        if (currentPayload) {
-            const userName = extractUserName(currentPayload);
-            const expCountdown = calculateTimeRemaining(currentPayload.exp);
-            title += ` (${userName} · ⏳ ${expCountdown.text})`;
-        }
-        window.SwaggerActivityBar.updateItem("jwt-inspector", { title });
+        window.SwaggerActivityBar.updateItem("jwt-inspector", {
+            title: t("activityBarTitle", "JWT Claims & Token Inspector")
+        });
     }
 
     let isGuideRegistered = false;
