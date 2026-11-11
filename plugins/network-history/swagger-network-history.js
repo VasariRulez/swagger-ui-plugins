@@ -1,50 +1,57 @@
 /**
  * @file swagger-network-history.js
- * @summary Plugin Swagger UI per la cronologia delle chiamate di rete, metriche di performance e replay automatico (ID 11 & ID 10).
+ * @summary Swagger UI Network History, Performance Telemetry & 1-Click Request Replay plugin.
  *
- * DESCRIZIONE:
- * Intercetta in modo non distruttivo tutte le richieste HTTP (fetch) effettuate tramite Swagger UI.
- * Per ogni chiamata eseguita:
- *  1. Misura la latenza effettiva in millisecondi (⏱ ms) e la dimensione del payload (📦 KB / B).
- *  2. Inietta badge di performance inline accanto al codice HTTP di risposta nel DOM di Swagger UI (ID 10).
- *  3. Memorizza la cronologia completa in un buffer circolare persistente in localStorage (ID 11).
- *  4. Fornisce un Drawer laterale destro da 480px perfettamente integrato con l'Activity Bar (o fallback),
- *     con ricerca testuale, chip di filtro per status code (2xx, 4xx, 5xx) e schede dettagliate Request/Response.
- *  5. Funzionalità [🔄 Replay]: scorrimento fluido fino all'endpoint, apertura accordion, evidenziazione glow,
- *     auto-compilazione di parametri/body e trigger automatico del pulsante Execute.
- *  6. Funzionalità [↺ Ripristina]: compila tutti i parametri consentendo modifiche manuali prima dell'invio.
+ * DESCRIPTION:
+ * Non-destructively intercepts all HTTP fetch requests initiated by Swagger UI.
+ * For each executed call:
+ *  1. Measures actual latency in milliseconds (ms) and payload size (KB / B).
+ *  2. Injects inline performance badges beside HTTP response codes in Swagger UI's DOM.
+ *  3. Persists full request/response history in a circular buffer in localStorage.
+ *  4. Provides a 480px slide-out drawer seamlessly integrated into the Activity Bar (or floating fallback),
+ *     featuring real-time search, status code filters (2xx, 4xx, 5xx), and detailed Request/Response tabs.
+ *  5. [Replay]: smooth scroll to endpoint, expands accordion, flashes pulse glow,
+ *     auto-populates parameters/body, and triggers Execute.
+ *  6. [Restore]: populates parameters into the form without executing, allowing manual review.
  *
- * GUIDA ALLA MANUTENZIONE PER SVILUPPATORI:
- * - Per modificare il numero massimo di chiamate memorizzate: aggiornare CONFIG.MAX_HISTORY_ENTRIES.
- * - Per modificare le soglie di latenza dei badge colorati: aggiornare CONFIG.LATENCY_THRESHOLDS.
- * - Per modificare i percorsi URL ignorati dall'intercettore: aggiornare CONFIG.IGNORED_URL_PATTERNS.
- * - Per modificare la larghezza del Drawer o le chiavi localStorage: verificare CONFIG.
+ * HOST CONFIGURATION:
+ * Optional settings can be provided via `window.SwaggerNetworkHistoryConfig`:
+ * - maxEntries: number (default: 50)
+ * - storageKey: string (default: "swp_swagger_network_history")
+ * - drawerWidth: number (default: 480)
+ * - openOnError: boolean (default: false) - automatically opens drawer on HTTP >= 400 or network failure
+ * - excludePatterns: RegExp[] - additional URL patterns to exclude from logging
  */
 
 (() => {
     "use strict";
 
     // =========================================================================
-    // 1. CONFIGURAZIONE GENERALE (Modificabile dallo sviluppatore)
+    // 1. GENERAL CONFIGURATION (Host Injection & Defaults)
     // =========================================================================
 
+    const userConfig = window.SwaggerNetworkHistoryConfig || {};
+
     const CONFIG = {
-        /** Chiave utilizzata in localStorage per persistere la cronologia */
-        STORAGE_KEY: "swp_swagger_network_history",
+        /** LocalStorage key for persisting request history */
+        STORAGE_KEY: userConfig.storageKey || "swp_swagger_network_history",
 
-        /** Numero massimo di richieste memorizzate nel buffer circolare */
-        MAX_HISTORY_ENTRIES: 50,
+        /** Maximum number of requests retained in the circular buffer */
+        MAX_HISTORY_ENTRIES: typeof userConfig.maxEntries === "number" ? userConfig.maxEntries : 50,
 
-        /** Larghezza in pixel del Drawer laterale destro */
-        DRAWER_WIDTH_PX: 480,
+        /** Width in pixels of the right slide-out drawer */
+        DRAWER_WIDTH_PX: typeof userConfig.drawerWidth === "number" ? userConfig.drawerWidth : 480,
 
-        /** Soglie per la colorazione della latenza (in millisecondi) */
+        /** Automatically open drawer on HTTP errors (>= 400) or network failures */
+        OPEN_ON_ERROR: Boolean(userConfig.openOnError),
+
+        /** Latency thresholds for performance badges (in milliseconds) */
         LATENCY_THRESHOLDS: {
-            FAST: 500,     // < 500ms verde
-            MEDIUM: 1500   // 500-1500ms giallo/arancio, > 1500ms rosso
+            FAST: typeof userConfig.fastThreshold === "number" ? userConfig.fastThreshold : 500,
+            MEDIUM: typeof userConfig.mediumThreshold === "number" ? userConfig.mediumThreshold : 1500
         },
 
-        /** ID degli elementi DOM principali generati dallo script */
+        /** DOM element IDs generated by this plugin */
         ELEMENT_IDS: {
             DRAWER: "swp-network-history-drawer",
             STYLES: "swp-network-history-styles",
@@ -55,35 +62,36 @@
             CLEAR_BTN: "swp-nh-clear-btn"
         },
 
-        /** Pattern URL e asset da ignorare nell'intercettore di rete */
+        /** URL patterns ignored by the fetch interceptor */
         IGNORED_URL_PATTERNS: [
             /\.js(\?.*)?$/i,
             /\.css(\?.*)?$/i,
             /\/swagger\/v1\/swagger\.json/i,
             /\/favicon\.ico/i,
             /\/_framework\//i,
-            /\/oauth2-redirect\.html/i
+            /\/oauth2-redirect\.html/i,
+            ...(Array.isArray(userConfig.excludePatterns) ? userConfig.excludePatterns : [])
         ]
     };
 
     // =========================================================================
-    // 2. STATO APPLICATIVO INTERNO
+    // 2. INTERNAL APPLICATION STATE
     // =========================================================================
 
     const state = {
-        /** Elenco ordinato degli elementi della cronologia (il più recente per primo) */
+        /** Ordered list of history items (most recent first) */
         history: [],
 
-        /** Filtro testuale attivo (percorso, metodo, query) */
+        /** Active text filter (path, method, query) */
         searchFilter: "",
 
         /** Filtro per categoria di status code ("all", "2xx", "4xx", "5xx") */
         statusFilter: "all",
 
-        /** ID dell'elemento correntemente espanso nella vista dettagli */
+        /** ID of currently expanded history item in details view */
         expandedItemId: null,
 
-        /** Scheda attiva nel dettaglio dell'elemento ("request" | "response") */
+        /** Active tab in details view ("request" | "response") */
         activeDetailTab: "request",
 
         /** Flag che indica se il Drawer è attualmente aperto */
@@ -94,11 +102,11 @@
     };
 
     // =========================================================================
-    // 3. FUNZIONI DI UTILITÀ (Stringhe, Formattazione, Temi, React Setter)
+    // 3. UTILITY FUNCTIONS (Strings, Formatting, Themes, React Setter)
     // =========================================================================
 
     /**
-     * Genera un identificativo univoco per ogni voce della cronologia.
+     * Generates a unique identifier for each history item.
      * @returns {string}
      */
     function generateId() {
@@ -106,7 +114,7 @@
     }
 
     /**
-     * Rimuove eventuali caratteri zero-width (\u200B) iniettati da Swagger UI nei percorsi e nei tag.
+     * Cleans zero-width characters (\u200B) injected by Swagger UI.
      * @param {string} str
      * @returns {string}
      */
@@ -155,7 +163,7 @@
     }
 
     /**
-     * Estrae il path relativo senza query string da un URL assoluto o relativo.
+     * Extracts relative path without query string from an absolute or relative URL.
      * @param {string} urlString
      * @returns {string}
      */
@@ -196,7 +204,7 @@
     }
 
     /**
-     * Verifica se il tema scuro è attualmente attivo nella pagina.
+     * Checks if dark mode is currently active on the page.
      * @returns {boolean}
      */
     function isDarkMode() {
@@ -208,7 +216,7 @@
     }
 
     /**
-     * Copia un testo negli appunti con feedback visivo sul pulsante trigger.
+     * Copies text to clipboard with visual feedback on button.
      * @param {string} text
      * @param {HTMLElement} buttonElement
      * @param {string} [successText="Copiato!"]
@@ -247,9 +255,9 @@
             ta.select();
             const ok = document.execCommand("copy");
             document.body.removeChild(ta);
-            callback(ok ? successText : "Errore");
+            callback(ok ? successText : "Error");
         } catch {
-            callback("Errore");
+            callback("Error");
         }
     }
 
@@ -290,7 +298,7 @@
     }
 
     /**
-     * Tenta di formattare una stringa come JSON indentato se valida, altrimenti la restituisce tal quale.
+     * Formats string as indented JSON if valid, otherwise returns as-is.
      * @param {string} str
      * @returns {string}
      */
@@ -309,7 +317,7 @@
     // =========================================================================
 
     /**
-     * Carica lo storico delle chiamate memorizzate dal localStorage.
+     * Loads stored call history from localStorage.
      */
     function loadHistoryFromStorage() {
         try {
@@ -323,13 +331,13 @@
                 state.history = parsed.slice(0, CONFIG.MAX_HISTORY_ENTRIES);
             }
         } catch (error) {
-            console.warn("[Network History] Errore nel caricamento della cronologia:", error);
+            console.warn("[Network History] Error loading history from localStorage:", error);
             state.history = [];
         }
     }
 
     /**
-     * Salva l'attuale cronologia in localStorage applicando il limite circolare.
+     * Saves current history to localStorage applying circular buffer limit.
      */
     function saveHistoryToStorage() {
         try {
@@ -339,16 +347,16 @@
             }
             localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(state.history));
         } catch (error) {
-            console.warn("[Network History] Quota storage superata o errore di scrittura:", error);
+            console.warn("[Network History] Storage quota exceeded or write error:", error);
         }
     }
 
     /**
-     * Svuota completamente la cronologia con conferma dell'utente.
+     * Clears entire history with user confirmation.
      */
     function clearHistory() {
         if (state.history.length === 0) return;
-        const confirmed = window.confirm("Sei sicuro di voler svuotare tutta la cronologia delle chiamate di rete?");
+        const confirmed = window.confirm("Are you sure you want to clear the entire network history?");
         if (!confirmed) return;
 
         state.history = [];
@@ -359,7 +367,7 @@
     }
 
     // =========================================================================
-    // 5. INTERCETTORE DI RETE (Patched window.fetch)
+    // 5. NETWORK INTERCEPTOR (Patched window.fetch)
     // =========================================================================
 
     /**
@@ -397,7 +405,7 @@
                 Object.assign(result, options.headers);
             }
         } catch {
-            // Ignora errori di parsing header
+            // Ignore parsing errors header
         }
 
         return result;
@@ -463,7 +471,7 @@
                 const response = await originalFetch.apply(this, args);
                 const durationMs = Math.round(performance.now() - startTime);
 
-                // Clone non distruttivo della response per leggere il body senza consumare lo stream
+                // Non-destructive clone of response to read body without consuming stream
                 const responseClone = response.clone();
                 let responseBodyText = "";
                 let sizeBytes = 0;
@@ -483,7 +491,7 @@
                     responseHeaders[key] = val;
                 });
 
-                // Creazione elemento della cronologia
+                // Create history entry
                 const historyItem = {
                     id: generateId(),
                     timestamp: requestDate.toISOString(),
@@ -507,7 +515,7 @@
                     }
                 };
 
-                // Aggiunge in cima alla cronologia
+                // Prepend to history
                 state.history.unshift(historyItem);
                 saveHistoryToStorage();
 
@@ -521,11 +529,16 @@
                 renderHistoryList();
                 updateHeaderBadge();
 
+                // Auto-open drawer on HTTP error if configured
+                if (CONFIG.OPEN_ON_ERROR && response.status >= 400 && !state.isDrawerOpen) {
+                    toggleDrawer(true);
+                }
+
                 return response;
             } catch (networkError) {
                 const durationMs = Math.round(performance.now() - startTime);
 
-                // Registra la chiamata fallita a livello di rete
+                // Record network-level failed call
                 const failedItem = {
                     id: generateId(),
                     timestamp: requestDate.toISOString(),
@@ -553,6 +566,11 @@
                 saveHistoryToStorage();
                 renderHistoryList();
                 updateHeaderBadge();
+
+                // Auto-open drawer on network failure if configured
+                if (CONFIG.OPEN_ON_ERROR && !state.isDrawerOpen) {
+                    toggleDrawer(true);
+                }
 
                 throw networkError;
             }
@@ -591,7 +609,7 @@
 
     /**
      * Inietta il badge con metriche di latenza e dimensione accanto all'intestazione "Server response" in Swagger UI.
-     * Mantiene la tabella sottostante (Code e Details) pulita e allineata.
+     * Keeps underlying response table clean and aligned.
      * Include tentativi scaglionati nel tempo per attendere il completamento del rendering React di Swagger.
      * @param {object} item
      */
@@ -613,9 +631,9 @@
                 const opMethod = methodEl.textContent.trim().toUpperCase();
                 const opPath = pathEl.textContent.trim();
 
-                // Verifica se questo opblock corrisponde alla chiamata effettuata
+                // Verify whether this opblock matches the executed call
                 if (opMethod === item.method && isPathMatchingTemplate(item.path, opPath)) {
-                    // Cerca l'intestazione "Server response" (h4 o h5)
+                    // Look for "Server response" header (h4 or h5)
                     let headerEl = null;
                     const headers = opblock.querySelectorAll(".responses-wrapper h4, .responses-inner h4, h4");
                     for (const h of headers) {
@@ -643,7 +661,7 @@
                             </span>
                         `;
 
-                        // Rimuovi eventuali badge rimasti accidentalmente nella tabella di risposta
+                        // Remove any stray badges in response table
                         opblock.querySelectorAll(".response-col_status .swp-metrics-badge-wrap, thead .swp-metrics-badge-wrap").forEach((el) => {
                             el.remove();
                         });
@@ -662,7 +680,7 @@
     }
 
     /**
-     * Verifica se una route effettiva (es. /api/Candidate/123) corrisponde a un template Swagger (es. /api/Candidate/{id}).
+     * Checks if an actual route (e.g. /api/users/123) matches an OpenAPI template (e.g. /api/users/{id}).
      * @param {string} actualPath
      * @param {string} templatePath
      * @returns {boolean}
@@ -692,7 +710,7 @@
     }
 
     // =========================================================================
-    // 7. ENGINE DI REPLAY & RIPRISTINO CAMPI (ID 11)
+    // 7. REPLAY & PARAMETER RESTORE ENGINE
     // =========================================================================
 
     /**
@@ -720,10 +738,10 @@
                 }
             }
         } catch {
-            // Ignora errori di parsing dello state
+            // Ignore state parsing errors
         }
 
-        // 2. Euristica dai segmenti del percorso (es. /api/Candidate/Grid -> Candidate)
+        // 2. Fallback heuristic from path segments (e.g. /api/users/list -> users)
         const clean = path.replace(/^\/?(api\/)?/i, "");
         const firstSegment = clean.split("/")[0];
         if (firstSegment) return firstSegment;
@@ -732,7 +750,7 @@
     }
 
     /**
-     * Trova la sezione DOM del controller genitore (.opblock-tag-section) in Swagger UI.
+     * Finds parent controller DOM section (.opblock-tag-section) in Swagger UI.
      * @param {string} tag
      * @returns {HTMLElement|null}
      */
@@ -740,13 +758,13 @@
         if (!tag) return null;
         const normalizedTargetTag = cleanZeroWidth(tag).toLowerCase();
 
-        // 1. Ricerca per ID convenzionale generato da Swagger UI
+        // 1. Search by conventional ID generated by Swagger UI
         const sanitizedId = tag.replace(/\s+/g, "_");
         const byId = document.getElementById(`operations-tag-${tag}`)
                   || document.getElementById(`operations-tag-${sanitizedId}`);
         if (byId) return byId.closest(".opblock-tag-section") || byId;
 
-        // 2. Ricerca per attributo data-tag
+        // 2. Search by data-tag attribute
         try {
             const byData = document.querySelector(`.swagger-ui [data-tag="${CSS.escape(tag)}"]`);
             if (byData) return byData.closest(".opblock-tag-section") || byData;
@@ -803,7 +821,7 @@
     }
 
     /**
-     * Trova l'elemento .opblock corrispondente al metodo e al percorso specificati.
+     * Finds the .opblock element corresponding to given method and path.
      * @param {string} method
      * @param {string} path
      * @returns {HTMLElement|null}
@@ -827,16 +845,16 @@
     }
 
     /**
-     * Esegue il Replay di una chiamata precedente, compilando i parametri e premendo Execute.
+     * Replays a previous call, populating parameters and triggering Execute.
      * Gestisce l'apertura asincrona del tag controller se collassato e centra la testa dell'endpoint.
      * @param {string} itemId
-     * @param {boolean} [autoExecute=true] Se false, compila i campi senza premere Execute.
+     * @param {boolean} [autoExecute=true] If false, populates form fields without executing.
      */
     async function replayRequest(itemId, autoExecute = true) {
         const item = state.history.find((x) => x.id === itemId);
         if (!item) return;
 
-        // 1. Cerca l'opblock nel DOM corrente
+        // 1. Find opblock in current DOM
         let opblock = findOpblockForRoute(item.method, item.path);
 
         // Se l'opblock non è presente nel DOM, il controller genitore potrebbe essere collassato
@@ -868,14 +886,14 @@
         }
 
         if (!opblock) {
-            alert(`Impossibile trovare l'endpoint [${item.method}] ${item.path} nella documentazione Swagger corrente.`);
+            alert(`Unable to find endpoint [${item.method}] ${item.path} in the current Swagger UI documentation.`);
             return;
         }
 
         // 2. Espandi l'operazione (.opblock) se chiusa
         ensureOpblockOpen(opblock);
 
-        // 3. Centra la TESTA dell'endpoint (.opblock-summary) a video (NON il centro della card gigante!)
+        // 3. Center endpoint summary header in viewport
         await sleep(60);
         const headerElement = opblock.querySelector(".opblock-summary") || opblock;
         headerElement.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -883,7 +901,7 @@
         // 4. Evidenziazione visiva Glow per focalizzare l'attenzione
         highlightOpblockGlow(opblock);
 
-        // 5. Attiva "Try it out" se non ancora premuto
+        // 5. Activate "Try it out" if not already enabled
         await sleep(100);
         const tryOutBtn = opblock.querySelector(".btn.try-out__btn");
         if (tryOutBtn && !tryOutBtn.classList.contains("cancel")) {
@@ -901,7 +919,7 @@
 
         await sleep(150);
 
-        // 8. Se richiesto l'autoExecute, preme il pulsante Execute di Swagger UI
+        // 8. If autoExecute requested, click Swagger UI Execute button
         if (autoExecute) {
             const executeBtn = opblock.querySelector(".btn.execute, .btn.execute.opblock-control__btn");
             if (executeBtn) {
@@ -932,7 +950,7 @@
     function populateOpblockParameters(opblock, item) {
         const queryParams = item.queryParams || {};
 
-        // Itera le righe di parametri nella tabella parametri di Swagger
+        // Iterate parameter rows in Swagger parameters table
         const paramRows = opblock.querySelectorAll("tr.parameters[data-param-name], .parameters-col_name");
 
         paramRows.forEach((row) => {
@@ -940,7 +958,7 @@
             const paramName = nameEl?.textContent?.trim().replace(/\*$/, "");
             if (!paramName) return;
 
-            // Se il parametro è presente nei queryParams della chiamata
+            // If parameter is present in queryParams of the call
             if (queryParams[paramName] !== undefined) {
                 const input = row.closest("tr")?.querySelector("input, select") || row.querySelector("input, select");
                 if (input instanceof HTMLInputElement) {
@@ -963,7 +981,7 @@
     }
 
     /**
-     * Mostra un piccolo avviso fluttuante accanto all'endpoint con l'esito del replay.
+     * Displays temporary floating toast next to endpoint with replay result.
      * @param {HTMLElement} opblock
      * @param {string} message
      */
@@ -992,7 +1010,7 @@
     }
 
     /**
-     * Genera il comando cURL formattato a partire da un elemento di cronologia.
+     * Generates formatted cURL command from history item.
      * @param {object} item
      * @returns {string}
      */
@@ -1033,7 +1051,7 @@
 
     /**
      * Registra l'icona del plugin nell'Activity Bar globale (se presente), altrimenti genera il trigger fallback.
-     * Include polling di sicurezza per rilevare l'Activity Bar anche in caso di caricamento asincrono.
+     * Includes polling to detect Activity Bar in case of asynchronous loading.
      */
     function registerWithActivityBar() {
         if (window.SwaggerActivityBar && typeof window.SwaggerActivityBar.registerItem === "function") {
@@ -1057,10 +1075,10 @@
             return;
         }
 
-        // Fallback: inietta il pulsante standard nella pagina Swagger UI (se Activity Bar assente)
+        // Fallback: inject standard button into Swagger UI if Activity Bar is absent
         renderFallbackTrigger();
 
-        // Controllo asincrono: se l'Activity Bar viene registrata poco dopo, esegui la migrazione automatica
+        // Async check: if Activity Bar is registered later, perform automatic migration
         let attempts = 0;
         const checkInterval = setInterval(() => {
             attempts++;
@@ -1074,8 +1092,8 @@
     }
 
     /**
-     * Inietta il pulsante trigger di fallback in Swagger UI (se l'Activity Bar è assente).
-     * Cerca sequenzialmente .scheme-container .schemes, .topbar-wrapper o .information-container.
+     * Injects fallback trigger button into Swagger UI if Activity Bar is absent.
+     * Checks sequentially .scheme-container .schemes, .topbar-wrapper, or .information-container.
      */
     function renderFallbackTrigger() {
         if (document.getElementById(CONFIG.ELEMENT_IDS.TRIGGER_FALLBACK)) return;
@@ -1084,7 +1102,7 @@
         btn.type = "button";
         btn.id = CONFIG.ELEMENT_IDS.TRIGGER_FALLBACK;
         btn.className = "swp-nh-fallback-btn";
-        btn.title = "Apri / Chiudi Cronologia Chiamate (Network History)";
+        btn.title = "Open / Close Network Call History";
         btn.innerHTML = `
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"></circle>
@@ -1117,7 +1135,7 @@
     }
 
     /**
-     * Crea e appende la struttura HTML del Drawer nel body.
+     * Creates and appends drawer HTML structure to body.
      */
     function renderDrawerDom() {
         if (document.getElementById(CONFIG.ELEMENT_IDS.DRAWER)) return;
@@ -1138,28 +1156,28 @@
                     <span id="${CONFIG.ELEMENT_IDS.COUNT_BADGE}" class="swp-nh-count-badge">0</span>
                 </div>
                 <div class="swp-nh-header-right">
-                    <button type="button" id="${CONFIG.ELEMENT_IDS.CLEAR_BTN}" class="swp-nh-btn-icon" title="Svuota tutta la cronologia">
+                    <button type="button" id="${CONFIG.ELEMENT_IDS.CLEAR_BTN}" class="swp-nh-btn-icon" title="Clear entire network history">
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <polyline points="3 6 5 6 21 6"></polyline>
                             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                         </svg>
                         <span>Svuota</span>
                     </button>
-                    <button type="button" class="swp-nh-btn-icon swp-nh-btn-close" title="Chiudi pannello (Esc)">
+                    <button type="button" class="swp-nh-btn-icon swp-nh-btn-close" title="Close drawer (Esc)">
                         ✕
                     </button>
                 </div>
             </div>
 
-            <!-- Toolbar di Ricerca & Filtri -->
+            <!-- Search & Filters Toolbar -->
             <div class="swp-nh-toolbar">
                 <div class="swp-nh-search-wrap">
                     <svg class="swp-nh-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="11" cy="11" r="8"></circle>
                         <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                     </svg>
-                    <input type="text" id="${CONFIG.ELEMENT_IDS.SEARCH_INPUT}" class="swp-nh-search-input" placeholder="Filtra per URL, rotta o metodo..." />
-                    <button type="button" class="swp-nh-search-clear" title="Cancella ricerca" style="display:none;">✕</button>
+                    <input type="text" id="${CONFIG.ELEMENT_IDS.SEARCH_INPUT}" class="swp-nh-search-input" placeholder="Filter by URL, route, or method..." />
+                    <button type="button" class="swp-nh-search-clear" title="Clear search" style="display:none;">✕</button>
                 </div>
 
                 <div class="swp-nh-filter-chips">
@@ -1183,7 +1201,7 @@
     }
 
     /**
-     * Aggancia i listener di evento per ricerca, filtri e chiusura del Drawer.
+     * Attaches event listeners for search, filters, and closing drawer.
      * @param {HTMLElement} drawer
      */
     function attachDrawerDomEvents(drawer) {
@@ -1191,14 +1209,14 @@
         drawer.querySelector(".swp-nh-btn-close")?.addEventListener("click", () => toggleDrawer(false));
         drawer.querySelector(`#${CONFIG.ELEMENT_IDS.CLEAR_BTN}`)?.addEventListener("click", clearHistory);
 
-        // Chiusura tramite tasto ESC
+        // Close on ESC key
         window.addEventListener("keydown", (e) => {
             if (e.key === "Escape" && state.isDrawerOpen) {
                 toggleDrawer(false);
             }
         });
 
-        // Ricerca testuale
+        // Textual search filter
         const searchInput = drawer.querySelector(`#${CONFIG.ELEMENT_IDS.SEARCH_INPUT}`);
         const searchClear = drawer.querySelector(".swp-nh-search-clear");
 
@@ -1232,7 +1250,7 @@
     }
 
     /**
-     * Mostra o nasconde il Drawer laterale adattando il padding di Swagger UI.
+     * Toggles slide-out drawer, adjusting Swagger UI content padding.
      * @param {boolean} [forceState]
      */
     function toggleDrawer(forceState) {
@@ -1250,7 +1268,7 @@
             window.SwaggerActivityBar.setItemActive("network-history", nextOpen);
         }
 
-        // Aggiorna lo stato visivo del pulsante di fallback se presente
+        // Update visual state of fallback button if present
         document.getElementById(CONFIG.ELEMENT_IDS.TRIGGER_FALLBACK)?.classList.toggle("is-active", nextOpen);
 
         if (nextOpen) {
@@ -1270,7 +1288,7 @@
     }
 
     /**
-     * Renderizza l'elenco delle chiamate nel Drawer applicando i filtri attivi.
+     * Renders list of calls in drawer applying active filters.
      */
     function renderHistoryList() {
         const listContainer = document.getElementById(CONFIG.ELEMENT_IDS.LIST_CONTAINER);
@@ -1300,7 +1318,7 @@
                         <line x1="12" y1="8" x2="12" y2="12"></line>
                         <line x1="12" y1="16" x2="12.01" y2="16"></line>
                     </svg>
-                    <p>Nessuna chiamata registrata${state.searchFilter ? " corrispondente ai filtri" : ""}.</p>
+                    <p>No network calls recorded${state.searchFilter ? " matching current filter" : ""}.</p>
                     <span>Esegui una richiesta su Swagger UI per visualizzarla qui in tempo reale.</span>
                 </div>
             `;
@@ -1333,10 +1351,10 @@
                             </div>
 
                             <div class="swp-nh-card-actions">
-                                <button type="button" class="swp-nh-btn-replay" data-action="replay" data-item-id="${item.id}" title="Riesegui chiamata immediatamente con scrolling e auto-execute">
+                                <button type="button" class="swp-nh-btn-replay" data-action="replay" data-item-id="${item.id}" title="Replay call immediately with smooth scroll and auto-execute">
                                     🔄 Replay
                                 </button>
-                                <button type="button" class="swp-nh-btn-restore" data-action="restore" data-item-id="${item.id}" title="Compila i campi senza eseguire la chiamata">
+                                <button type="button" class="swp-nh-btn-restore" data-action="restore" data-item-id="${item.id}" title="Populate parameters into form without executing">
                                     ↺ Ripristina
                                 </button>
                                 <button type="button" class="swp-nh-btn-toggle" data-action="toggle" data-item-id="${item.id}" title="Dettagli payload">
@@ -1357,7 +1375,7 @@
     }
 
     /**
-     * Restituisce la classe identificativa per il tipo di status HTTP.
+     * Returns CSS class for HTTP status type.
      * @param {number} status
      * @returns {"2xx"|"4xx"|"5xx"|"err"}
      */
@@ -1418,7 +1436,7 @@
 
                     <div class="swp-nh-detail-section">
                         <span class="swp-nh-detail-label">Payload Inviato (Body):</span>
-                        <pre class="swp-nh-code-block">${escapeHtml(formattedReqBody || "(Nessun body inviato)")}</pre>
+                        <pre class="swp-nh-code-block">${escapeHtml(formattedReqBody || "(No request body sent)")}</pre>
                     </div>
                 </div>
 
@@ -1440,14 +1458,14 @@
     }
 
     /**
-     * Aggancia i listener di evento alle schede e ai pulsanti di azione della lista.
+     * Attaches event listeners to tabs and list action buttons.
      * @param {HTMLElement} listContainer
      */
     function attachCardListEvents(listContainer) {
-        // Toggle espansione card cliccando in qualsiasi punto dell'header della card
+        // Toggle card expansion on card header click
         listContainer.querySelectorAll(".swp-nh-card-header").forEach((header) => {
             header.addEventListener("click", (e) => {
-                // Se il click è avvenuto su un pulsante (Replay, Ripristina, Toggle freccia), lascia gestire al pulsante
+                // If click was on an action button, let the button handler process it
                 if (e.target.closest("button, a, input, select, textarea")) {
                     return;
                 }
@@ -1470,7 +1488,7 @@
             });
         });
 
-        // Pulsante Replay (Auto-execute)
+        // Replay button (Auto-execute)
         listContainer.querySelectorAll('[data-action="replay"]').forEach((btn) => {
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
@@ -1479,7 +1497,7 @@
             });
         });
 
-        // Pulsante Ripristina (Solo compilazione campi)
+        // Restore button (Populate form fields only)
         listContainer.querySelectorAll('[data-action="restore"]').forEach((btn) => {
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
@@ -1668,7 +1686,7 @@
                 padding: 4px 8px;
             }
 
-            /* --- Toolbar: Ricerca & Chip Filtri --- */
+            /* --- Toolbar: Search & Filter Chips --- */
             .swp-nh-toolbar {
                 padding: 10px 14px;
                 border-bottom: 1px solid var(--nh-border-light);
@@ -2227,7 +2245,7 @@
     let isGuideRegistered = false;
 
     /**
-     * Pubblica i metadati e la documentazione del plugin nella guida interattiva dell'Activity Bar (ID 27).
+     * Publishes plugin metadata and documentation to interactive Activity Bar guide.
      */
     function registerGuideDocumentation() {
         if (isGuideRegistered) return;
@@ -2237,12 +2255,12 @@
                 id: "network-history",
                 name: "Network History, Metrics & Replay",
                 version: "1.0.0",
-                description: "Traccia le chiamate di rete con metriche di latenza e payload inline, cronologia persistente e riesecuzione istantanea in 1-click.",
+                description: "Intercepts HTTP calls with inline latency and payload badges, persistent circular buffer, and instant 1-click request replay.",
                 shortcuts: [
-                    "Esc: Chiude il drawer laterale",
-                    "Click Card: Espande i dettagli di Request e Response",
-                    "Replay: Scorre, compila ed esegue la chiamata",
-                    "Ripristina: Compila i campi senza inviare"
+                    "Esc: Close slide-out drawer",
+                    "Click Card: Expand Request and Response details",
+                    "Replay: Scroll, populate form, and execute call",
+                    "Restore: Populate form fields without executing"
                 ],
                 iconHtml: `
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -2251,24 +2269,24 @@
                     </svg>
                 `,
                 manual: `
-### Panoramica
-Il plugin intercetta in modo trasparente tutte le richieste HTTP eseguite da Swagger UI. Per ogni chiamata completata misura la latenza reale in millisecondi (\`⏱ ms\`) e la dimensione del payload (\`📦 KB\`).
+### Overview
+The plugin transparently intercepts all HTTP requests executed by Swagger UI. For every completed request, it measures actual latency in milliseconds (\`⏱ ms\`) and payload size (\`📦 KB\`).
 
-### Metriche Inline (ID 10)
-Accanto all'intestazione **Server response** di ogni endpoint compare un badge con feedback a colori:
-- 🟢 **Verde (< 500 ms)**: risposta rapida.
-- 🟡 **Giallo (500 - 1500 ms)**: latenza intermedia.
-- 🔴 **Rosso (> 1500 ms)**: query complessa o lenta.
+### Inline Metrics
+Beside the **Server response** header of each operation, color-coded performance badges are displayed:
+- 🟢 **Green (< 500 ms)**: fast response.
+- 🟡 **Yellow (500 - 1500 ms)**: moderate latency.
+- 🔴 **Red (> 1500 ms)**: slow or heavy query.
 
-### Drawer Cronologia (ID 11)
-Cliccando l'icona dell'orologio nell'Activity Bar si apre il cassetto laterale destro:
-- **Buffer circolare**: memorizza fino a 50 chiamate in \`localStorage\` per preservare lo storico tra ricaricamenti della pagina (\`F5\`).
-- **Filtri rapidi**: ricerca per percorso/metodo e chip per status code (\`2xx\`, \`4xx\`, \`5xx\`).
-- **Dettagli completi**: visualizza parametri di query, payload inviato, header e risposta con pulsanti \`Copia cURL\` e \`Copia JSON\`.
+### History Drawer
+Clicking the clock icon in the Activity Bar opens the right-hand slide-out drawer:
+- **Circular buffer**: retains recent calls in \`localStorage\` to preserve history across page reloads (\`F5\`).
+- **Quick filters**: search by path/method and filter chips for status codes (\`2xx\`, \`4xx\`, \`5xx\`).
+- **Comprehensive details**: inspect query parameters, request payload, headers, and response with \`Copy cURL\` and \`Copy JSON\` actions.
 
-### Motore Replay & Ripristino
-- **[🔄 Replay]**: espande automaticamente il controller se collassato, centra la barra dell'endpoint con effetto luminoso Glow, compila parametri e body e preme \`Execute\`.
-- **[↺ Ripristina]**: compila tutti i campi lasciando all'utente la libertà di modificarli prima dell'invio manuale.
+### Replay & Restore Engine
+- **[🔄 Replay]**: unfolds parent controller, centers endpoint with glow animation, populates parameters/body, and triggers \`Execute\`.
+- **[↺ Restore]**: populates parameters and body into the form without executing, allowing manual review and edits.
 `
             });
         }

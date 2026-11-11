@@ -34,6 +34,35 @@ app.UseSwaggerUI(c =>
 
 ---
 
+## Configuration Reference
+
+You can customize shortcuts, thresholds, and behavior by defining `window.SwaggerSpotlightConfig` before loading the script:
+
+```html
+<script>
+  window.SwaggerSpotlightConfig = {
+    primaryKey: "k",               // Key used with Ctrl or Cmd (default: "k")
+    enableSlashShortcut: true,     // Enable '/' key trigger when not typing in an input (default: true)
+    maxResults: 30,                // Maximum number of results in the search modal (default: 30)
+    highlightDurationMs: 2500,     // Duration of target glow highlight in ms (default: 2500)
+    backToTopEnabled: true,        // Enable floating Back to Top button (default: true)
+    backToTopThresholdPx: 280      // Scroll distance before Back to Top button appears (default: 280)
+  };
+</script>
+<script src="/plugins/spotlight-search/swagger-spotlight-search.js"></script>
+```
+
+| Setting | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `primaryKey` | `string` | `"k"` | Trigger key used with `Ctrl` or `Cmd` |
+| `enableSlashShortcut` | `boolean` | `true` | Allows pressing `/` to open search when no input has focus |
+| `maxResults` | `number` | `30` | Maximum number of results returned in search dropdown |
+| `highlightDurationMs` | `number` | `2500` | Duration of the glow ring animation after scrolling |
+| `backToTopEnabled` | `boolean` | `true` | Enables bottom-right floating Back to Top button |
+| `backToTopThresholdPx` | `number` | `280` | Scroll offset threshold to show Back to Top button |
+
+---
+
 ## Keyboard Shortcuts
 
 | Shortcut | Action |

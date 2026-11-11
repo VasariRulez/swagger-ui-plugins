@@ -1,20 +1,19 @@
 /**
  * @file swagger-activity-bar.js
- * @summary Plugin Indipendente Activity Bar & Extensions Guide per Swagger UI (ASP.NET Core / OpenAPI).
- *          Fornisce:
- *          1. Una barra verticale laterale in stile VS Code (44px) fissa a sinistra,
- *             accessibile a qualsiasi livello di scroll.
- *          2. Un'API globale su `window.SwaggerActivityBar` che permette a tutti i plugin
- *             (Spotlight Search, SignalR Tester, Network History, Presets, ecc.) di registrarsi
- *             dinamicamente come strumenti e/o pubblicare la propria documentazione.
- *          3. La modale "🧩 Extensions Manager & Interactive Feature Guide" (ID 27) integrata
- *             nella sezione bottom dell'Activity Bar, con navigazione Master-Detail e visualizzatore
- *             Markdown per le guide dei plugin attivi.
+ * @summary Standalone Activity Bar & Extensions Guide plugin for Swagger UI (ASP.NET Core / OpenAPI).
+ *          Provides:
+ *          1. A VS Code-style vertical dock (44px) pinned to the left edge,
+ *             accessible at any scroll depth.
+ *          2. A global API on `window.SwaggerActivityBar` (and `window.registerPluginGuide`)
+ *             allowing all suite plugins (Spotlight Search, SignalR Tester, Network History, Presets, etc.)
+ *             to dynamically register docked tools and/or publish their documentation.
+ *          3. A built-in "🧩 Extensions Manager & Interactive Feature Guide" modal docked at the
+ *             bottom of the Activity Bar, featuring master-detail navigation and a Markdown reader.
  *
- * --- ARCHITETTURA MODULARE & DECOUPLING ---
- * 1. Totale Indipendenza:
- *    - Si occupa del contenitore laterale, del layout responsive di Swagger UI e del ciclo di vita dei pulsanti.
- * 2. API Globale `window.SwaggerActivityBar`:
+ * --- MODULAR ARCHITECTURE & DECOUPLING ---
+ * 1. Complete Independence:
+ *    - Manages the sidebar container, Swagger UI responsive layout offset, and button lifecycle.
+ * 2. Global API `window.SwaggerActivityBar`:
  *    - `registerItem({ id, title, iconHtml, onClick, section, order, ariaLabel })`
  *    - `unregisterItem(id)`
  *    - `setItemActive(id, isActive)`
@@ -24,61 +23,61 @@
  *    - `registerPluginGuide({ id, name, version, description, manual, shortcuts, iconHtml })`
  *    - `getRegisteredGuides()`
  * 3. Graceful Fallback:
- *    - I plugin consumatori verificano `window.SwaggerActivityBar?.isAvailable()` prima di registrarsi.
- * 4. Pieno Supporto Light & Dark Mode:
- *    - Sincronizzato automaticamente con le classi del tema di Swagger UI.
+ *    - Consuming plugins verify `window.SwaggerActivityBar?.isAvailable()` before registering.
+ * 4. Full Light & Dark Theme Support:
+ *    - Automatically synchronizes with Swagger UI theme classes.
  *
- * --- GUIDA ALLA MANUTENZIONE PER SVILUPPATORI ---
- * - Per modificare dimensioni o posizionamento: Aggiornare `CONFIG.BAR_WIDTH_PX`.
- * - Per personalizzare gli stili della barra o della modale: Vedere la sezione `injectStyles()`.
+ * --- DEVELOPER MAINTENANCE GUIDE ---
+ * - To adjust dimensions or placement: Update `CONFIG.BAR_WIDTH_PX`.
+ * - To customize bar or modal styles: See the `injectStyles()` section.
  */
 (() => {
     "use strict";
 
     // =========================================================================
-    // 1. CONFIGURAZIONE GENERALE
+    // 1. GENERAL CONFIGURATION
     // =========================================================================
     const CONFIG = {
-        /** Larghezza in pixel della barra laterale */
+        /** Width in pixels of the sidebar */
         BAR_WIDTH_PX: 44,
 
-        /** ID elemento DOM principale */
+        /** Main DOM container ID */
         BAR_ID: "swagger-activity-bar",
 
-        /** ID elemento stili CSS iniettati */
+        /** Injected CSS styles element ID */
         STYLES_ID: "swagger-activity-bar-styles",
 
-        /** ID elemento modale della guida plugin */
+        /** Extensions guide modal DOM element ID */
         MODAL_ID: "swp-extensions-guide-modal",
 
-        /** Z-index per posizionamento sopra elementi standard di Swagger */
+        /** Z-index for positioning above standard Swagger UI layers */
         Z_INDEX: 999990
     };
 
     // =========================================================================
-    // 2. STATO IN-MEMORY REGISTRAZIONI
+    // 2. IN-MEMORY REGISTRATION STATE
     // =========================================================================
-    /** Mappa degli elementi registrati nell'Activity Bar: id -> opzioni */
+    /** Registered Activity Bar items map: id -> options */
     const registeredItems = new Map();
 
-    /** Mappa delle guide dei plugin registrate: id -> metadata */
+    /** Registered plugin guides map: id -> metadata */
     const registeredGuides = new Map();
 
-    /** Flag DOM montato */
+    /** Flag indicating whether the bar DOM has mounted */
     let isMounted = false;
 
-    /** ID della guida correntemente aperta in dettaglio (null = lista master) */
+    /** Currently opened guide ID in detail view (null = master list) */
     let currentDetailGuideId = null;
 
-    /** Flag che indica se la modale guida è aperta */
+    /** Flag indicating whether the guide modal is open */
     let isGuideModalOpen = false;
 
     // =========================================================================
-    // 3. FUNZIONI DI UTILITÀ & MICRO-PARSER MARKDOWN
+    // 3. UTILITY FUNCTIONS & MARKDOWN MICRO-PARSER
     // =========================================================================
 
     /**
-     * Sanifica una stringa per prevenire vulnerabilità XSS nel DOM.
+     * Sanitizes a string to prevent XSS vulnerabilities in the DOM.
      * @param {string} str
      * @returns {string}
      */
@@ -93,7 +92,7 @@
     }
 
     /**
-     * Normalizza e analizza una scorciatoia (stringa o oggetto) in { key, desc }.
+     * Normalizes and parses a shortcut (string or object) into { key, desc }.
      * @param {string|Object} sc
      * @returns {{ key: string, desc: string }}
      */
@@ -117,57 +116,57 @@
     }
 
     /**
-     * Parser Markdown leggero e sicuro per la formattazione dei manuali d'uso.
-     * Supporta: titoli (###), elenchi puntati (- ), grassetto (**), codice inline (`),
-     * blocchi di codice (```) e alert di stile GitHub (> [!NOTE]).
+     * Lightweight, safe Markdown parser for rendering plugin manuals.
+     * Supports: headers (###), bullet lists (- ), bold (**), inline code (`),
+     * code blocks (```) and GitHub-style alerts (> [!NOTE]).
      * @param {string} text
      * @returns {string}
      */
     function renderMarkdownToHtml(text) {
         if (!text || typeof text !== "string") return "";
 
-        // 1. Sanificazione preliminare
+        // 1. Preliminary sanitization
         let src = escapeHtml(text.trim());
 
-        // 2. Blocchi di codice con tre backtick ```
+        // 2. Code blocks with triple backticks ```
         src = src.replace(/```([a-z0-9_-]*)\n([\s\S]*?)```/gi, (match, lang, code) => {
             return `<pre class="guide-code-block"><code>${code.trim()}</code></pre>`;
         });
 
-        // 3. Intestazioni Markdown (### Titolo, #### Sottotitolo)
+        // 3. Markdown headings (### Title, #### Subtitle)
         src = src.replace(/^#### (.*?)$/gm, '<h5 class="guide-heading-5">$1</h5>');
         src = src.replace(/^### (.*?)$/gm, '<h4 class="guide-heading-4">$1</h4>');
         src = src.replace(/^## (.*?)$/gm, '<h3 class="guide-heading-3">$1</h3>');
 
-        // 4. Alert in stile GitHub (> [!NOTE] ...)
+        // 4. GitHub-style alerts (> [!NOTE] ...)
         src = src.replace(/^&gt;\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(.*?)$/gim, (match, type, content) => {
             const lowerType = type.toLowerCase();
             return `<div class="guide-alert guide-alert--${lowerType}"><strong class="guide-alert-title">${type}</strong>: ${content}</div>`;
         });
 
-        // 5. Grassetto (**testo**) e Corsivo (*testo*)
+        // 5. Bold (**text**) and Italic (*text*)
         src = src.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
         src = src.replace(/\*(.*?)\*/g, "<em>$1</em>");
 
-        // 6. Codice inline (`codice`)
+        // 6. Inline code (`code`)
         src = src.replace(/`([^`]+)`/g, '<code class="guide-code-inline">$1</code>');
 
-        // 7. Elenchi puntati (- elemento o * elemento)
+        // 7. Bullet lists (- item or * item)
         src = src.replace(/^\s*[-*]\s+(.*?)$/gm, '<li class="guide-list-item">$1</li>');
         src = src.replace(/(<li class="guide-list-item">[\s\S]*?<\/li>)/g, '<ul class="guide-list">$1</ul>');
-        // Rimuove liste annidate duplicate generate da regex adiacenti
+        // Remove duplicate nested lists generated by adjacent matches
         src = src.replace(/<\/ul>\s*<ul class="guide-list">/g, "");
 
-        // 8. Linee orizzontali (---)
+        // 8. Horizontal rules (---)
         src = src.replace(/^---$/gm, '<hr class="guide-divider"/>');
 
-        // 9. Paragrafi semplici (righe separate da doppio a-capo)
+        // 9. Simple paragraphs (separated by double newlines)
         const paragraphs = src.split(/\n{2,}/);
         return paragraphs
             .map((p) => {
                 const trimmed = p.trim();
                 if (!trimmed) return "";
-                // Non avvolgere in <p> se è già un blocco (ul, h3, h4, pre, alert, hr)
+                // Do not wrap in <p> if it is already a block element
                 if (/^<(ul|h[1-6]|pre|div|hr)/i.test(trimmed)) {
                     return trimmed;
                 }
@@ -177,7 +176,7 @@
     }
 
     // =========================================================================
-    // 4. STILI CSS ADATTIVI (Light e Dark Mode)
+    // 4. ADAPTIVE CSS STYLES (Light & Dark Mode)
     // =========================================================================
     function injectStyles() {
         if (document.getElementById(CONFIG.STYLES_ID)) return;
@@ -186,16 +185,16 @@
         style.id = CONFIG.STYLES_ID;
         style.textContent = `
             /* =========================================================================
-               SWAGGER ACTIVITY BAR & EXTENSIONS GUIDE - STILI GRAFICI MODULARI
+               SWAGGER ACTIVITY BAR & EXTENSIONS GUIDE - MODULAR GRAPHIC STYLES
                ========================================================================= */
 
-            /* Riserva spazio a sinistra nel body per non sovrapporsi ai contenuti */
+            /* Reserve space on the left side of body so content does not overlap */
             body {
                 padding-left: ${CONFIG.BAR_WIDTH_PX}px !important;
                 box-sizing: border-box !important;
             }
 
-            /* Contenitore principale Activity Bar (Stile VS Code) */
+            /* Main Activity Bar container (VS Code style) */
             #${CONFIG.BAR_ID} {
                 --bar-bg: #f8fafc;
                 --bar-border: #cbd5e1;
@@ -223,7 +222,7 @@
                 transition: background 0.2s ease, border-color 0.2s ease;
             }
 
-            /* Tema Scuro Activity Bar */
+            /* Dark theme Activity Bar */
             html.dark-mode #${CONFIG.BAR_ID},
             body.dark-mode #${CONFIG.BAR_ID} {
                 --bar-bg: #181818;
@@ -247,7 +246,7 @@
                 padding-bottom: 6px;
             }
 
-            /* Pulsante Singolo Item */
+            /* Individual Item Button */
             .swagger-activity-btn {
                 position: relative;
                 width: 36px;
@@ -295,7 +294,7 @@
             }
 
             /* =========================================================================
-               MODALE EXTENSIONS GUIDE (ID 27) - DESIGN CENTRATO BLUR POPUP
+               EXTENSIONS GUIDE MODAL (ID 27) - CENTERED BLUR POPUP DESIGN
                ========================================================================= */
             .swp-guide-overlay {
                 --guide-overlay-bg: rgba(0, 0, 0, 0.55);
@@ -329,7 +328,7 @@
                 animation: swpGuideFadeIn 0.18s ease-out;
             }
 
-            /* Tema Scuro Modale */
+            /* Dark Mode Modal Styles */
             html.dark-mode .swp-guide-overlay,
             body.dark-mode .swp-guide-overlay {
                 --guide-overlay-bg: rgba(0, 0, 0, 0.75);
@@ -370,7 +369,7 @@
                 box-sizing: border-box;
             }
 
-            /* Header della Modale */
+            /* Modal Header */
             .swp-guide-header {
                 padding: 14px 18px;
                 border-bottom: 1px solid var(--guide-border);
@@ -444,7 +443,7 @@
                 border-color: var(--guide-primary);
             }
 
-            /* Corpo della Modale (Scrollabile) */
+            /* Modal Body (Scrollable) */
             .swp-guide-body {
                 flex: 1 1 auto;
                 min-height: 0;
@@ -774,21 +773,21 @@
         document.body.appendChild(bar);
         isMounted = true;
 
-        // Registra automaticamente il pulsante di sistema Extensions Guide in fondo (section: bottom)
+        // Automatically register Extensions Guide system button at the bottom (section: bottom)
         registerSystemGuideButton();
 
-        // Renderizza tutti gli item registrati
+        // Render all registered items
         renderAllItems();
     }
 
     /**
-     * Registra il pulsante di sistema per l'Extensions Guide in fondo all'Activity Bar.
+     * Registers the system button for the Extensions Guide at the bottom of the Activity Bar.
      */
     function registerSystemGuideButton() {
         api.registerItem({
             id: "extensions-guide",
-            title: "Swagger UI Plugins Suite — Plugin & Guida Interattiva",
-            ariaLabel: "Plugin e Guida Interattiva",
+            title: "Swagger UI Plugins Suite — Extensions & Interactive Guide",
+            ariaLabel: "Plugins and Interactive Guide",
             iconHtml: `
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M20.5 11H19V7a2 2 0 0 0-2-2h-4V3.5a2.5 2.5 0 0 0-5 0V5H4a2 2 0 0 0-2 2v3.8h1.5a2.5 2.5 0 0 1 0 5H2V20a2 2 0 0 0 2 2h4v-1.5a2.5 2.5 0 0 1 5 0V22h4a2 2 0 0 0 2-2v-4h1.5a2.5 2.5 0 0 0 0-5z"/>
@@ -801,7 +800,7 @@
     }
 
     /**
-     * Renderizza o riordina tutti gli item registrati nella barra.
+     * Renders or reorders all registered items in the bar.
      */
     function renderAllItems() {
         if (!isMounted) return;
@@ -829,7 +828,7 @@
     }
 
     /**
-     * Crea l'elemento pulsante per un singolo item.
+     * Creates the button element for a single item.
      * @param {Object} item
      * @returns {HTMLButtonElement}
      */
@@ -852,18 +851,18 @@
     }
 
     // =========================================================================
-    // 6. GESTIONE MODALE EXTENSIONS GUIDE (ID 27 - Master-Detail)
+    // 6. EXTENSIONS GUIDE MODAL MANAGEMENT (Master-Detail)
     // =========================================================================
 
     /**
-     * Mostra o nasconde la modale della guida plugin.
+     * Shows or hides the plugin guide modal.
      * @param {boolean} [forceState]
      */
     function toggleGuideModal(forceState) {
         const nextState = typeof forceState === "boolean" ? forceState : !isGuideModalOpen;
         isGuideModalOpen = nextState;
 
-        // Se chiudiamo, rimuovi la modale dal DOM
+        // If closing, remove the modal from DOM
         if (!nextState) {
             currentDetailGuideId = null;
             document.getElementById(CONFIG.MODAL_ID)?.remove();
@@ -876,7 +875,7 @@
     }
 
     /**
-     * Monta o ri-renderizza il DOM della modale.
+     * Mounts or re-renders the modal DOM.
      */
     function renderGuideModalDom() {
         let overlay = document.getElementById(CONFIG.MODAL_ID);
@@ -887,14 +886,14 @@
             overlay.setAttribute("role", "dialog");
             overlay.setAttribute("aria-modal", "true");
 
-            // Chiusura al click sul backdrop sfocato esterno
+            // Close on outside backdrop click
             overlay.addEventListener("click", (e) => {
                 if (e.target === overlay) {
                     toggleGuideModal(false);
                 }
             });
 
-            // Gestione tasto ESC: se in dettaglio torna a lista; se in lista chiude
+            // Handle ESC key: return from detail to list, or close modal
             window.addEventListener("keydown", (e) => {
                 if (e.key === "Escape" && isGuideModalOpen) {
                     if (currentDetailGuideId) {
@@ -915,8 +914,8 @@
     let renderModalRafId = null;
 
     /**
-     * Pianifica un aggiornamento asincrono della modale via requestAnimationFrame.
-     * Previene deadlock, loop infiniti e thrashing in caso di registrazioni consecutive.
+     * Schedules an asynchronous modal update via requestAnimationFrame.
+     * Prevents deadlocks and thrashing during consecutive registrations.
      */
     function scheduleGuideModalRender() {
         if (renderModalRafId) return;
@@ -929,7 +928,7 @@
     }
 
     /**
-     * Renderizza il contenuto della modale (Vista Master o Vista Detail).
+     * Renders modal content (Master View or Detail View).
      */
     function renderGuideModalContent() {
         const overlay = document.getElementById(CONFIG.MODAL_ID);
@@ -945,12 +944,12 @@
             }
         }
 
-        // Vista Master (Lista Alfabetica)
+        // Master View (Alphabetical list)
         renderMasterView(overlay, guides);
     }
 
     /**
-     * Renderizza la vista Master con l'elenco alfabetico delle schede.
+     * Renders Master view with alphabetical list of plugin cards.
      * @param {HTMLElement} overlay
      * @param {Array<Object>} guides
      */
@@ -963,11 +962,11 @@
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M20.5 11H19V7a2 2 0 0 0-2-2h-4V3.5a2.5 2.5 0 0 0-5 0V5H4a2 2 0 0 0-2 2v3.8h1.5a2.5 2.5 0 0 1 0 5H2V20a2 2 0 0 0 2 2h4v-1.5a2.5 2.5 0 0 1 5 0V22h4a2 2 0 0 0 2-2v-4h1.5a2.5 2.5 0 0 0 0-5z"/>
                         </svg>
-                        <span>Swagger UI Plugins Suite — Plugin & Guida</span>
-                        <span class="swp-guide-count-chip">${guides.length} attivi</span>
+                        <span>Swagger UI Plugins Suite — Extensions & Guide</span>
+                        <span class="swp-guide-count-chip">${guides.length} active</span>
                     </div>
                     <div class="swp-guide-header-actions">
-                        <button type="button" class="swp-guide-btn-icon swp-guide-btn-close" title="Chiudi modale (Esc)">✕</button>
+                        <button type="button" class="swp-guide-btn-icon swp-guide-btn-close" title="Close modal (Esc)">✕</button>
                     </div>
                 </div>
 
@@ -980,8 +979,8 @@
                                 <line x1="12" y1="8" x2="12" y2="12"/>
                                 <line x1="12" y1="16" x2="12.01" y2="16"/>
                             </svg>
-                            <p><strong>Nessun plugin ha ancora registrato la propria guida.</strong></p>
-                            <span>I plugin della suite espongono la documentazione tramite <code>window.SwaggerActivityBar.registerPluginGuide()</code>.</span>
+                            <p><strong>No plugins have registered their guide yet.</strong></p>
+                            <span>Suite plugins register their documentation via <code>window.SwaggerActivityBar.registerPluginGuide()</code>.</span>
                         </div>
                     ` : guides.map((g) => `
                         <div class="swp-guide-card" data-guide-id="${escapeHtml(g.id)}">
@@ -1016,10 +1015,10 @@
             </div>
         `;
 
-        // Event listener chiusura
+        // Close button event listener
         overlay.querySelector(".swp-guide-btn-close")?.addEventListener("click", () => toggleGuideModal(false));
 
-        // Click su card per aprire la vista di dettaglio
+        // Click on card to open detail view
         overlay.querySelectorAll(".swp-guide-card").forEach((card) => {
             card.addEventListener("click", () => {
                 const guideId = card.getAttribute("data-guide-id");
@@ -1032,7 +1031,7 @@
     }
 
     /**
-     * Renderizza la vista Detail con pulsante [← Indietro] e il manuale Markdown.
+     * Renders Detail view with [← Back] button and Markdown manual.
      * @param {HTMLElement} overlay
      * @param {Object} guide
      */
@@ -1041,17 +1040,17 @@
 
         overlay.innerHTML = `
             <div class="swp-guide-window" onclick="event.stopPropagation();">
-                <!-- Header Detail con tasto Indietro -->
+                <!-- Detail Header with Back button -->
                 <div class="swp-guide-header">
-                    <button type="button" class="swp-guide-btn-back" title="Torna alla lista dei plugin">
-                        ← Indietro
+                    <button type="button" class="swp-guide-btn-back" title="Return to plugins list">
+                        ← Back
                     </button>
                     <div class="swp-guide-header-title">
                         <span>${escapeHtml(guide.name)}</span>
                         <span class="swp-guide-version-badge">v${escapeHtml(guide.version)}</span>
                     </div>
                     <div class="swp-guide-header-actions">
-                        <button type="button" class="swp-guide-btn-icon swp-guide-btn-close" title="Chiudi modale (Esc)">✕</button>
+                        <button type="button" class="swp-guide-btn-icon swp-guide-btn-close" title="Close modal (Esc)">✕</button>
                     </div>
                 </div>
 
@@ -1075,7 +1074,7 @@
                     <!-- Box Scorciatoie da tastiera (se presenti) -->
                     ${guide.shortcuts && guide.shortcuts.length > 0 ? `
                         <div class="swp-guide-shortcuts-box">
-                            <span class="swp-guide-shortcuts-title">Scorciatoie & Comandi Rapidi:</span>
+                            <span class="swp-guide-shortcuts-title">Shortcuts & Quick Actions:</span>
                             <div class="swp-guide-shortcuts-list">
                                 ${guide.shortcuts.map((sc) => {
                                     const parsed = parseShortcut(sc);
@@ -1096,22 +1095,22 @@
             </div>
         `;
 
-        // Event listener tasto indietro
+        // Back button event listener
         overlay.querySelector(".swp-guide-btn-back")?.addEventListener("click", () => {
             currentDetailGuideId = null;
             renderGuideModalContent();
         });
 
-        // Event listener chiusura
+        // Close button event listener
         overlay.querySelector(".swp-guide-btn-close")?.addEventListener("click", () => toggleGuideModal(false));
     }
 
     // =========================================================================
-    // 7. API PUBBLICA WINDOW.SWAGGERACTIVITYBAR
+    // 7. PUBLIC API WINDOW.SWAGGERACTIVITYBAR
     // =========================================================================
     const api = {
         /**
-         * Ritorna true per confermare che l'Activity Bar è disponibile.
+         * Returns true to confirm that the Activity Bar is available.
          * @returns {boolean}
          */
         isAvailable() {
@@ -1119,21 +1118,21 @@
         },
 
         /**
-         * Registra un nuovo pulsante nella barra laterale.
+         * Registers a new button in the sidebar.
          * @param {Object} options
-         * @param {string} options.id - Identificativo univoco
-         * @param {string} [options.title] - Testo tooltip al passaggio del mouse
-         * @param {string} options.iconHtml - Markup HTML dell'icona (preferibilmente SVG per alta nitidezza)
-         * @param {Function} options.onClick - Callback click
-         * @param {"top"|"bottom"} [options.section="top"] - Sezione di collocamento
-         * @param {number} [options.order=100] - Priorità di ordinamento (valori bassi in alto)
-         * @param {string} [options.ariaLabel] - Descrizione accessibilità
-         * @param {boolean} [options.isActive=false] - Stato attivo iniziale
+         * @param {string} options.id - Unique identifier
+         * @param {string} [options.title] - Tooltip title text
+         * @param {string} options.iconHtml - Icon HTML markup (SVG recommended)
+         * @param {Function} options.onClick - Click callback
+         * @param {"top"|"bottom"} [options.section="top"] - Placement section
+         * @param {number} [options.order=100] - Sort order priority (lower values on top)
+         * @param {string} [options.ariaLabel] - Accessibility label
+         * @param {boolean} [options.isActive=false] - Initial active state
          * @returns {HTMLElement|null}
          */
         registerItem(options) {
             if (!options || !options.id) {
-                console.warn("[SwaggerActivityBar] Impossibile registrare item privo di 'id'.", options);
+                console.warn("[SwaggerActivityBar] Cannot register item without an 'id'.", options);
                 return null;
             }
 
@@ -1158,7 +1157,7 @@
         },
 
         /**
-         * Alias di convenienza per `registerItem`.
+         * Convenience alias for `registerItem`.
          * @param {Object} options
          * @returns {HTMLElement|null}
          */
@@ -1167,7 +1166,7 @@
         },
 
         /**
-         * Rimuove un elemento registrato dall'Activity Bar.
+         * Removes a registered item from the Activity Bar.
          * @param {string} id
          */
         unregisterItem(id) {
@@ -1180,7 +1179,7 @@
         },
 
         /**
-         * Modifica lo stato attivo (evidenziato/selezionato) di un pulsante.
+         * Sets the active (highlighted/selected) state of a button.
          * @param {string} id
          * @param {boolean} isActive
          */
@@ -1196,7 +1195,7 @@
         },
 
         /**
-         * Aggiorna parzialmente il markup o il titolo di un elemento registrato.
+         * Partially updates the markup or title of a registered item.
          * @param {string} id
          * @param {Object} updates
          */
@@ -1217,7 +1216,7 @@
         },
 
         /**
-         * Restituisce l'elemento DOM del pulsante registrato.
+         * Returns the DOM element of the registered button.
          * @param {string} id
          * @returns {HTMLElement|null}
          */
@@ -1226,45 +1225,65 @@
         },
 
         /**
-         * Registra la documentazione/guida d'uso di un plugin per la modale Extensions Guide (ID 27).
+         * Registers plugin documentation/guide for the Extensions Guide modal.
          * @param {Object} guideOptions
-         * @param {string} guideOptions.id - Identificativo univoco del plugin
-         * @param {string} guideOptions.name - Nome visualizzato
-         * @param {string} [guideOptions.version="1.0.0"] - Versione del plugin
-         * @param {string} [guideOptions.description=""] - Sintesi in 1-2 frasi
-         * @param {string} [guideOptions.manual=""] - Testo dettagliato formattato in Markdown
-         * @param {Array<string>} [guideOptions.shortcuts=[]] - Elenco scorciatoie (es. ["Ctrl + K: Cerca", "Esc: Chiudi"])
-         * @param {string} [guideOptions.iconHtml=""] - Icona SVG rappresentativa
+         * @param {string} guideOptions.id - Unique plugin identifier
+         * @param {string} guideOptions.name - Display name
+         * @param {string} [guideOptions.version="1.0.0"] - Plugin version
+         * @param {string} [guideOptions.description=""] - Summary in 1-2 sentences
+         * @param {string} [guideOptions.manual=""] - Detailed Markdown manual
+         * @param {Array<string>} [guideOptions.shortcuts=[]] - List of shortcuts (e.g. ["Ctrl + K: Search", "Esc: Close"])
+         * @param {string} [guideOptions.iconHtml=""] - Representative SVG icon
          */
         registerPluginGuide(guideOptions) {
             if (!guideOptions || !guideOptions.id) {
-                console.warn("[SwaggerActivityBar] Impossibile registrare guida plugin priva di 'id'.", guideOptions);
+                console.warn("[SwaggerActivityBar] Cannot register plugin guide without an 'id'.", guideOptions);
                 return;
             }
 
-            // Evita registrazioni duplicate o chiamate cicliche
+            // Prevent duplicate registration or cyclical calls
             if (registeredGuides.has(guideOptions.id)) {
                 return;
             }
 
-            registeredGuides.set(guideOptions.id, {
-                id: guideOptions.id,
-                name: guideOptions.name || guideOptions.id,
-                version: guideOptions.version || "1.0.0",
-                description: guideOptions.description || "",
-                manual: guideOptions.manual || guideOptions.description || "",
+            const id = guideOptions.id;
+            const name = guideOptions.name || guideOptions.title || id;
+            const version = guideOptions.version || guideOptions.badge || "1.0.0";
+            const description = guideOptions.description || guideOptions.summary || "";
+            let manual = guideOptions.manual || "";
+
+            // Adaptive fallback: synthesize manual from features and howToUse if manual is not provided
+            if (!manual && (guideOptions.features || guideOptions.howToUse)) {
+                const sections = [];
+                if (Array.isArray(guideOptions.features) && guideOptions.features.length > 0) {
+                    sections.push("### Features\n" + guideOptions.features.map((f) => `- ${f}`).join("\n"));
+                }
+                if (Array.isArray(guideOptions.howToUse) && guideOptions.howToUse.length > 0) {
+                    sections.push("### How to Use\n" + guideOptions.howToUse.map((h, i) => `${i + 1}. ${h}`).join("\n"));
+                }
+                manual = sections.join("\n\n");
+            } else if (!manual) {
+                manual = description;
+            }
+
+            registeredGuides.set(id, {
+                id,
+                name,
+                version,
+                description,
+                manual,
                 shortcuts: Array.isArray(guideOptions.shortcuts) ? guideOptions.shortcuts : [],
                 iconHtml: guideOptions.iconHtml || ""
             });
 
-            // Se la modale è correntemente aperta, pianifica un aggiornamento asincrono debouncato
+            // If modal is currently open, schedule an async re-render
             if (isGuideModalOpen) {
                 scheduleGuideModalRender();
             }
         },
 
         /**
-         * Restituisce l'elenco ordinato alfabeticamente di tutte le guide registrate.
+         * Returns an alphabetically sorted list of all registered guides.
          * @returns {Array<Object>}
          */
         getRegisteredGuides() {
@@ -1272,7 +1291,7 @@
         },
 
         /**
-         * Apre o chiude programmaticamente la modale Extensions Guide.
+         * Programmatically opens or closes the Extensions Guide modal.
          * @param {boolean} [forceState]
          */
         toggleGuideModal(forceState) {
@@ -1280,74 +1299,74 @@
         }
     };
 
-    // Espone l'API globale
+    // Expose global APIs
     window.SwaggerActivityBar = api;
+    window.registerPluginGuide = api.registerPluginGuide.bind(api);
 
-    // Registra la documentazione dell'Activity Bar stessa nella Guida Estensioni
+    // Register Activity Bar documentation in the Extensions Guide
     api.registerPluginGuide({
         id: "swp-activity-bar",
         name: "Activity Bar & Extension Host",
         version: "1.0.0",
-        description: "Barra laterale verticale stile VS Code per ospitare pulsanti, badge, pannelli e la guida interattiva delle estensioni Swagger UI.",
+        description: "VS Code-style vertical dock hosting buttons, badges, flyout panels, and the interactive Extensions Guide.",
         iconHtml: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
             <line x1="9" y1="3" x2="9" y2="21"></line>
         </svg>`,
         shortcuts: [
-            "Esc: Chiude qualsiasi pannello dock aperto o la modale della guida"
+            "Esc: Close any active modal, popover, or docked drawer"
         ],
-        manual: `### Cos'è l'Activity Bar?
-L'**Activity Bar** è l'host centrale dell'architettura a plugin per Swagger UI.
-Ispirata alla barra delle attività di moderni IDE (es. Visual Studio Code), fornisce:
-- Una barra laterale compatta ad alto contrasto con supporto automatico sia al tema chiaro che scuro.
-- Slot per registrare pulsanti con icone vettoriali SVG, tooltip e contatori/badge dinamici.
-- Supporto a pannelli docked a comparsa laterale (es. *Network History*, *SignalR Tester*).
-- Gestione coordinata dello z-index, prevenzione delle sovrapposizioni e pulsante fisso in basso per la **Guida Estensioni** (icona 🧩).
+        manual: `### What is the Activity Bar?
+The **Activity Bar** is the central dock and host of the Swagger UI Plugins Suite.
+Inspired by modern IDEs (e.g. Visual Studio Code), it provides:
+- A compact vertical sidebar with automatic light and dark mode adaptation.
+- Slots for registering custom icon buttons, tooltips, and dynamic notification badges.
+- Coordinated drawer management for slide-out panels (e.g. *Network History*, *SignalR Tester*).
+- Coordinated z-index layers and a pinned bottom button for the **Extensions Guide** (puzzle icon 🧩).
 
-### Come registrare un pulsante con pannello
-I plugin possono agganciarsi all'Activity Bar tramite l'oggetto globale \`window.SwaggerActivityBar\`:
+### Registering a Dock Button
+Plugins attach buttons to the Activity Bar via \`window.SwaggerActivityBar.registerItem\`:
 
 \`\`\`javascript
 window.SwaggerActivityBar.registerItem({
-    id: "mio-plugin",
-    title: "Mio Plugin",
+    id: "my-plugin",
+    title: "My Plugin",
     iconHtml: "<svg>...</svg>",
     badge: 0,
-    section: "top", // "top" oppure "bottom"
+    section: "top", // "top" or "bottom"
     order: 10,
-    onClick: (e, btn) => { ... }
+    onClick: (e, btn) => { /* toggle tool panel */ }
 });
 \`\`\`
 
-### Come registrare la guida di un plugin
-Tutti i plugin possono documentare funzionalità e shortcut registrandosi nella guida:
+### Registering Plugin Documentation
+Plugins can document their features and shortcuts in the interactive guide:
 
 \`\`\`javascript
 window.SwaggerActivityBar.registerPluginGuide({
-    id: "mio-plugin",
-    name: "Mio Plugin",
+    id: "my-plugin",
+    name: "My Plugin",
     version: "1.0.0",
-    description: "Breve sommario",
-    shortcuts: ["Ctrl + K: Esempio scorciatoia"],
-    manual: "Guida in formato Markdown..."
+    description: "Brief overview",
+    manual: "Detailed Markdown documentation..."
 });
 \`\`\`
 
-### Evento di sincronizzazione
-Se un plugin viene caricato prima dell'Activity Bar, può registrarsi non appena scatta l'evento:
+### Synchronization Event
+If a plugin loads before the Activity Bar, it can register when the ready event fires:
 \`\`\`javascript
 window.addEventListener("swagger-activity-bar:ready", (e) => {
     const activityBar = e.detail;
-    // Registra pulsanti e documentazione
+    // Register buttons and guide
 });
 \`\`\``
     });
 
-    // Notifica eventuali listener in ascolto che l'API è disponibile
+    // Notify listeners that the API is ready
     window.dispatchEvent(new CustomEvent("swagger-activity-bar:ready", { detail: api }));
 
     // =========================================================================
-    // 8. INIZIALIZZAZIONE PLUGIN
+    // 8. PLUGIN INITIALIZATION
     // =========================================================================
     function initialize() {
         const startTime = Date.now();
@@ -1360,7 +1379,7 @@ window.addEventListener("swagger-activity-bar:ready", (e) => {
                 injectStyles();
                 mountActivityBar();
 
-                // Observer per mantenere l'Activity Bar in caso di re-render completo di Swagger UI
+                // Observer to retain Activity Bar in case of full Swagger UI re-render
                 const observer = new MutationObserver(() => {
                     if (!document.getElementById(CONFIG.BAR_ID)) {
                         mountActivityBar();
@@ -1368,7 +1387,7 @@ window.addEventListener("swagger-activity-bar:ready", (e) => {
                 });
                 observer.observe(document.body, { childList: true, subtree: true });
 
-                console.info("[Swagger Activity Bar] Modulo Activity Bar & Extensions Guide inizializzato con successo.");
+                console.info("[Swagger Activity Bar] Activity Bar & Extensions Guide module initialized successfully.");
             }
 
             if (Date.now() - startTime >= 30000) {

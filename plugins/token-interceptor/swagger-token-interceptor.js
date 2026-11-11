@@ -1,72 +1,68 @@
 /**
  * @file swagger-token-interceptor.js
- * @summary Automazione avanzata dell'autenticazione Swagger UI con MSAL/Entra ID
- *          e token JWT applicativo interno.
+ * @summary Automated dual-tier authentication plugin for Swagger UI (MSAL / Entra ID + App Bearer JWT).
  *
- * --- FLUSSO ARCHITETTURALE GENERALE ---
- * 1. L'utente esegue il login interattivo Microsoft (MSAL) tramite lo schema OpenAPI 'MsalAuth'.
- * 2. Un observer monitora lo store Redux interno di Swagger UI; alla ricezione dell'access_token di Entra ID:
- *    - Invia una richiesta HTTP POST all'endpoint interno dell'applicativo (/api/auth/token).
- *    - Estrae il token applicativo interno (da 'data.access_token').
- *    - Autentica automaticamente lo schema HTTP 'Bearer' di Swagger UI senza ricaricare la pagina.
- * 3. GESTIONE SCADENZA TOKEN (Punto 3):
- *    - Decodifica il payload JWT (Base64Url conforme a UTF-8) per estrarre il claim standard 'exp'.
- *    - Notifica la durata residua del token in minuti all'interno del toast di successo.
- *    - Imposta un timer per inviare un toast di avviso preventivo (~2 minuti prima della scadenza).
- *    - Imposta un timer finale per segnalare visivamente la scadenza avvenuta del token.
- * 4. GESTIONE LOGOUT SINCRONIZZATO (Punto 6):
- *    - Monitora l'annullamento dello schema MSAL nello store Redux.
- *    - Alla disconnessione di MSAL, revoca automaticamente l'autorizzazione dello schema 'Bearer'.
- *    - Cancella i timer pendenti di scadenza, svuota la memoria runtime e azzera i campi auto-compilati nel DOM.
- *    - Esegue un soft-reload ritardato per azzerare l'istanza PKCE interna di Swagger UI ed evitare errori invalid_grant.
- * 5. COMPILAZIONE PARAMETRI & RETE:
- *    - Compila dinamicamente gli input dei parametri manuali nel DOM (es. 'AzureAuthorization') tramite MutationObserver debouncato.
- *    - Traccia i campi auto-compilati con attributi data per evitare di sovrascrivere valori inseriti a mano.
- *    - Intercetta le chiamate 'fetch' per iniettare gli header secondari (token MSAL puro) sugli endpoint corrispondenti.
- * 6. CONCORRENZA & RESILIENZA:
- *    - Gestisce un contatore generazionale ('authGeneration') e segnali 'AbortController' per scartare risposte di rete obsolete.
- *    - Isola le richieste sull'origine locale per prevenire leak di token verso endpoint o CDN esterni.
- *
- * --- GUIDA ALLA MANUTENZIONE PER SVILUPPATORI / AGENTI IA ---
- * - Per rinominare lo schema MSAL: Modificare la costante MSAL_SCHEME_NAME.
- * - Per rinominare lo schema Bearer applicativo: Modificare APP_SCHEME_NAME.
- * - Per cambiare la rotta dell'endpoint di scambio token: Modificare EXCHANGE_ENDPOINT_URL.
- * - Per aggiungere o rimuovere header personalizzati (es. token MSAL puro): Aggiornare TARGET_HEADER_NAMES.
- *
- * Nota:
- * Swagger UI non garantisce stabilità delle proprie API interne/store Redux tra versioni.
- * Testare lo script quando Swagger UI viene aggiornato.
+ * --- ARCHITECTURAL FLOW ---
+ * 1. User performs interactive Microsoft MSAL login via OpenAPI schema ('MsalAuth').
+ * 2. Redux observer detects Entra ID access_token:
+ *    - Sends HTTP POST to token exchange endpoint (/api/auth/token).
+ *    - Extracts application access token (from configurable tokenProperty).
+ *    - Automatically authorizes Swagger UI Bearer scheme without page reload.
+ *    - Optionally persists token to localStorage (storageKey).
+ * 3. TOKEN LIFECYCLE & EXPIRATION:
+ *    - Decodes JWT payload (UTF-8 Base64Url) to extract 'exp' claim.
+ *    - Displays remaining lifetime in success toast.
+ *    - Pre-warning timer (~2 minutes before expiration) and final expiration notification.
+ * 4. SYNCHRONIZED LOGOUT:
+ *    - Observes MSAL scheme logout in Redux store.
+ *    - Revokes Bearer authorization, removes persisted token, and clears memory.
+ *    - Delayed soft-reload resets Swagger UI internal PKCE state to prevent invalid_grant errors.
+ * 5. PARAMETER AUTO-POPULATION & SECONDARY HEADERS:
+ *    - Intercepts fetch calls to inject secondary headers on targeted endpoints.
+ * 6. CONCURRENCY & RESILIENCE:
+ *    - Generational counter ('authGeneration') and AbortController discard stale network responses.
  */
 (function () {
     "use strict";
 
     // =========================================================================
-    // 1. CONFIGURAZIONE GENERALE (Parametri applicativi modificabili)
+    // 1. GENERAL CONFIGURATION (Host Injection & Defaults)
     // =========================================================================
 
     const userConfig = window.SwaggerAuthConfig || {};
 
     /** 
-     * Nome identificativo dello schema OAuth2/MSAL registrato in AddSecurityDefinition in C#.
+     * Security scheme identifier for IDP / MSAL registered in Swagger.
      * @type {string}
      */
     const MSAL_SCHEME_NAME = userConfig.msalSchemeName || "MsalAuth";
 
     /** 
-     * Nome identificativo dello schema Bearer interno registrato in AddSecurityDefinition in C#.
+     * Security scheme identifier for application Bearer tokens in Swagger.
      * @type {string}
      */
     const APP_SCHEME_NAME = userConfig.appSchemeName || "Bearer";
 
     /** 
-     * Endpoint API del backend incaricato di scambiare il token MSAL con il token applicativo.
+     * Backend API endpoint responsible for exchanging IDP tokens for API Bearer tokens.
      * @type {string}
      */
     const EXCHANGE_ENDPOINT_URL = userConfig.exchangeEndpoint || "/api/auth/token";
 
     /** 
-     * Lista degli header personalizzati da valorizzare con il token puro di MSAL (senza prefisso "Bearer ").
-     * Usato sia per compilare i campi grafici di Swagger, sia nell'intercettore di rete fetch.
+     * Custom property name to extract access token from exchange JSON response.
+     * @type {string|null}
+     */
+    const TOKEN_PROPERTY = userConfig.tokenProperty || null;
+
+    /** 
+     * Optional localStorage key for persisting active Bearer token.
+     * @type {string|null}
+     */
+    const STORAGE_KEY = userConfig.storageKey || null;
+
+    /** 
+     * List of headers to populate with raw IDP tokens.
      * @type {string[]}
      */
     const TARGET_HEADER_NAMES = Array.isArray(userConfig.targetHeaders) ? userConfig.targetHeaders : [
@@ -91,7 +87,7 @@
     /** Intervallo di polling (ms) per verificare l'inizializzazione di Swagger UI */
     const UI_DISCOVERY_INTERVAL_MS = 200;
 
-    /** Timeout massimo (ms) per l'attesa del caricamento dell'oggetto window.ui */
+    /** Maximum timeout (ms) waiting for window.ui */
     const UI_DISCOVERY_TIMEOUT_MS = 30000;
 
     /** Durata predefinita (ms) di permanenza dei banner toast a schermo */
@@ -117,7 +113,7 @@
     let exchangeAbortController = null;
 
     /**
-     * Contatore generazionale dello stato di autenticazione.
+     * Generational counter of authentication state to discard stale async responses.
      * Consente di ignorare risposte asincrone arrivate in ritardo da sessioni precedenti.
      * @type {number}
      */
@@ -129,11 +125,11 @@
     /** Flag di debounce per evitare scansioni DOM ridondanti ad ogni micro-mutazione */
     let autoFillScheduled = false;
 
-    /** Flag che indica se il primo tentativo di parsing della specifica OpenAPI è stato eseguito */
+    /** Flag indicating whether initial parsing of OpenAPI spec has been performed */
     let specDetectionAttempted = false;
 
     /**
-     * Mappatura dinamica degli endpoint e dei relativi header richiesti, popolata leggendo la specifica OpenAPI.
+     * Dynamic mapping of endpoints and required headers populated from OpenAPI spec.
      * Struttura: Map<EndpointPathTemplate (es. '/api/ScheduleInterview/{id}'), ArrayOfHeaderNames>
      * @type {Map<string, string[]>}
      */
@@ -144,8 +140,8 @@
     // =========================================================================
 
     /**
-     * Mostra una notifica toast floating in alto a destra sullo schermo.
-     * @param {string} message - Testo del messaggio da mostrare all'utente.
+     * Displays floating toast notification at top-right of screen.
+     * @param {string} message - Message text to display to user.
      * @param {"info"|"success"|"warning"|"error"} [type="info"] - Tipologia di notifica (determina i colori del box).
      */
     function showToast(message, type = "info") {
@@ -266,8 +262,8 @@
     }
 
     /**
-     * Calcola i minuti rimanenti prima della scadenza temporale specificata.
-     * @param {number} expiresAtMs - Timestamp in millisecondi della data di scadenza.
+     * Computes remaining minutes before expiration timestamp.
+     * @param {number} expiresAtMs - Expiration date timestamp in milliseconds.
      * @returns {number} Minuti arrotondati per eccesso (minimo 1).
      */
     function getRemainingMinutes(expiresAtMs) {
@@ -301,7 +297,7 @@
             "success"
         );
 
-        // Preavviso: 2 minuti prima della scadenza (o a metà vita se dura meno di 4 minuti)
+        // Pre-warning: 2 minutes before expiration (or midpoint if lifetime is under 4 minutes)
         const warningOffsetMs = remainingMs > 240000 ? 120000 : Math.floor(remainingMs / 2);
         const timeUntilWarningMs = remainingMs - warningOffsetMs;
 
@@ -317,6 +313,11 @@
         // Alert alla scadenza esatta del token
         expiredTimerId = window.setTimeout(() => {
             clearAuthorizedScheme(APP_SCHEME_NAME);
+            if (STORAGE_KEY) {
+                try {
+                    localStorage.removeItem(STORAGE_KEY);
+                } catch {}
+            }
             showToast(
                 "Il token applicativo è scaduto. Riesegui l'accesso per rinnovarlo.",
                 "error"
@@ -337,7 +338,7 @@
     }
 
     /**
-     * Estrae la mappa degli schemi attualmente autorizzati dallo stato Redux di Swagger.
+     * Extracts map of currently authorized schemes from Swagger Redux state.
      * @returns {object|null}
      */
     function getAuthorizedSchemes() {
@@ -379,7 +380,7 @@
     }
 
     // =========================================================================
-    // 6. AUTO-POPOLAMENTO DEI PARAMETRI NEI FORM (DOM Observer)
+    // 6. AUTO-POPULATION OF FORM PARAMETERS (DOM Observer)
     // =========================================================================
 
     /**
@@ -419,7 +420,7 @@
     }
 
     /**
-     * Rimuove il valore esclusivamente dai campi che erano stati auto-popolati dallo script.
+     * Removes values exclusively from inputs that were auto-populated by the script.
      */
     function clearAutoFilledInputFields() {
         for (const headerName of TARGET_HEADER_NAMES) {
@@ -434,7 +435,7 @@
     }
 
     /**
-     * Esegue il debounce dell'auto-fill tramite requestAnimationFrame per ottimizzare le prestazioni del browser.
+     * Debounces auto-population via requestAnimationFrame to optimize browser performance.
      */
     function scheduleAutoFill() {
         if (autoFillScheduled) return;
@@ -460,7 +461,7 @@
     }
 
     // =========================================================================
-    // 7. PARSING DELLA SPECIFICA OPENAPI (Rilevamento Endpoint Dinamici)
+    // 7. OPENAPI SPECIFICATION PARSING (Dynamic Endpoint Discovery)
     // =========================================================================
 
     function normalizeHeaderName(headerName) {
@@ -633,7 +634,7 @@
     }
 
     /**
-     * Intercettore fetch globale: inietta il token MSAL negli header di destinazione se mancanti.
+     * Global fetch interceptor: injects MSAL token into targeted headers if missing.
      */
     window.fetch = async function swaggerTokenInterceptor(resource, options = {}) {
         let requestUrl;
@@ -659,7 +660,7 @@
             return originalFetch(resource, options);
         }
 
-        // Scansione 'lazy' della specifica OpenAPI se non ancora effettuata
+        // Lazy scan of OpenAPI spec if not yet executed
         if (!specDetectionAttempted || dynamicAzureAuthEndpoints.size === 0) {
             detectEndpointsFromSwaggerSpec();
         }
@@ -692,7 +693,11 @@
     }
 
     function getInternalTokenFromExchangeResponse(data) {
-        return data?.data?.access_token || data?.access_token || null;
+        if (TOKEN_PROPERTY && data) {
+            if (data[TOKEN_PROPERTY]) return data[TOKEN_PROPERTY];
+            if (data.data && data.data[TOKEN_PROPERTY]) return data.data[TOKEN_PROPERTY];
+        }
+        return data?.data?.access_token || data?.access_token || data?.token || null;
     }
 
     async function getExchangeErrorMessage(response) {
@@ -758,11 +763,11 @@
 
             const ui = getSwaggerUi();
             if (!ui?.authActions || typeof ui.authActions.authorize !== "function") {
-                showToast(`Swagger UI non consente l'autorizzazione dello schema "${APP_SCHEME_NAME}".`, "error");
+                showToast(`Swagger UI does not allow authorizing scheme "${APP_SCHEME_NAME}".`, "error");
                 return;
             }
 
-            // Autorizzazione automatica dello schema Bearer
+            // Automatically authorize Bearer scheme
             ui.authActions.authorize({
                 [APP_SCHEME_NAME]: {
                     name: APP_SCHEME_NAME,
@@ -775,14 +780,23 @@
                 }
             });
 
-            // Pianifica il monitoraggio della scadenza del token appena applicato
+            // Persist token in localStorage if configured
+            if (STORAGE_KEY) {
+                try {
+                    localStorage.setItem(STORAGE_KEY, internalToken);
+                } catch (e) {
+                    console.warn("[Swagger Auth] Could not store token in localStorage:", e);
+                }
+            }
+
+            // Schedule expiration timer for newly applied token
             scheduleTokenExpirationAlerts(internalToken);
         } catch (error) {
             if (error?.name === "AbortError") return;
 
-            console.error("[Swagger Auth] Errore durante lo scambio token:", error);
+            console.error("[Swagger Auth] Error during token exchange:", error);
             if (generation === authGeneration && !logoutInProgress) {
-                showToast("Errore durante lo scambio del token applicativo.", "error");
+                showToast("Error exchanging application token.", "error");
             }
         } finally {
             if (generation === authGeneration) {
@@ -796,8 +810,8 @@
     // =========================================================================
 
     /**
-     * Esegue la pulizia a cascata: scollega Bearer, svuota la memoria e ricarica
-     * la pagina per resettare l'istanza PKCE interna di Swagger UI ed evitare l'errore AADSTS501481.
+     * Cascading cleanup: revokes Bearer scheme, clears memory, and triggers reload
+     * the page to reset Swagger UI internal PKCE instance and avoid AADSTS501481.
      */
     function handleLogout() {
         if (logoutInProgress) return;
@@ -814,6 +828,12 @@
         clearAuthorizedScheme(APP_SCHEME_NAME);
         clearAutoFilledInputFields();
 
+        if (STORAGE_KEY) {
+            try {
+                localStorage.removeItem(STORAGE_KEY);
+            } catch {}
+        }
+
         showToast("Sessione Microsoft chiusa. Ripristino sessione in corso...", "info");
 
         // Ricarica la pagina dopo un breve delay per azzerare lo stato PKCE corrotto in memoria
@@ -823,11 +843,11 @@
     }
 
     // =========================================================================
-    // 11. OBSERVER REDUX SWAGGER UI (Trigger Iniziale & Monitoraggio Sessione)
+    // 11. SWAGGER UI REDUX OBSERVER (Initial Trigger & Session Monitor)
     // =========================================================================
 
     /**
-     * Avvia il monitoraggio delle mutazioni dello store Redux di Swagger UI.
+     * Starts observing mutations in Swagger UI Redux store.
      */
     function initializeSwaggerStoreObserver() {
         const startedAt = Date.now();
@@ -864,13 +884,13 @@
                             return;
                         }
 
-                        // Trigger del logout se prima esisteva una sessione MSAL attiva
+                        // Trigger logout if an active MSAL session previously existed
                         if (lastMsalToken !== null) {
                             lastMsalToken = null;
                             handleLogout();
                         }
                     } catch (error) {
-                        console.warn("[Swagger Auth] Errore nell'observer dello store:", error);
+                        console.warn("[Swagger Auth] Error in store observer:", error);
                     }
                 });
 
@@ -892,7 +912,7 @@
     let isGuideRegistered = false;
 
     /**
-     * Pubblica i metadati e la documentazione del plugin nella guida interattiva dell'Activity Bar (ID 27).
+     * Publishes plugin metadata and documentation to interactive Activity Bar guide.
      */
     function registerGuideDocumentation() {
         if (isGuideRegistered) return;
@@ -902,11 +922,11 @@
                 id: "token-interceptor",
                 name: "Dual Token Interceptor (MSAL & Bearer)",
                 version: "1.0.0",
-                description: "Automatizza l'autenticazione a doppio livello: login Microsoft Entra ID -> token exchange interno -> Bearer applicativo dell'API.",
+                description: "Automates two-tier authentication: Microsoft Entra ID login -> internal token exchange -> application Bearer scheme.",
                 shortcuts: [
-                    "Authorize: Effettua il login Microsoft Entra ID nel popup standard",
-                    "Auto-Exchange: Esegue lo scambio trasparente con /api/auth/token",
-                    "Logout: Revoca e pulisce entrambe le sessioni contemporaneamente"
+                    "Authorize: Complete Microsoft Entra ID login in standard popup",
+                    "Auto-Exchange: Transparent exchange with token endpoint",
+                    "Logout: Revoke and clean both sessions synchronously"
                 ],
                 iconHtml: `
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -915,21 +935,21 @@
                     </svg>
                 `,
                 manual: `
-### Panoramica
-Risolve la complessità dell'autenticazione a due fattori dell'API, che richiede sia l'identità Microsoft Entra ID che il token applicativo interno emesso dal backend.
+### Overview
+Streamlines two-tier API authentication requiring both identity provider credentials (Microsoft Entra ID) and an internal backend application token.
 
-### Flusso Automatizzato
-1. Effettuando il login con il popup standard **Authorize** di Swagger, lo script cattura il token MSAL.
-2. Invia in background il token all'endpoint interno di scambio (\`/api/auth/token\`).
-3. Autorizza istantaneamente lo schema Bearer di Swagger con il token applicativo risultante.
-4. Gestisce il logout coerente azzerando lo stato sia in Swagger UI che nello storage locale.
+### Automated Flow
+1. Upon logging in via Swagger's standard **Authorize** dialog, the plugin captures the IDP token.
+2. In the background, exchanges the token with the configured backend exchange endpoint.
+3. Automatically authorizes the application Bearer scheme with the resulting token.
+4. Synchronizes logout across both schemes and resets PKCE authentication state.
 `
             });
         }
     }
 
     // =========================================================================
-    // 12. AVVIO
+    // 12. INITIALIZATION
     // =========================================================================
 
     initializeDomObserver();

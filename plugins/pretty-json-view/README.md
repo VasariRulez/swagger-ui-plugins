@@ -39,15 +39,38 @@ app.UseSwaggerUI(c =>
 
 ---
 
+## Configuration Reference
+
+You can configure indentation, expand depth, and string truncation via `window.SwaggerPrettyJsonConfig`:
+
+```html
+<script>
+  window.SwaggerPrettyJsonConfig = {
+    indent: 2,                  // Indentation spaces for formatted JSON copy & export (default: 2)
+    initialExpandDepth: 3,      // Initial tree level expanded automatically (default: 2)
+    truncateStringLength: 300   // Threshold in characters to truncate long strings with a toggle (default: 250)
+  };
+</script>
+<script src="/plugins/pretty-json-view/swagger-pretty-json-view.js"></script>
+```
+
+| Setting | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `indent` | `number` | `2` | Number of spaces used for indentation when formatting and copying JSON |
+| `initialExpandDepth` | `number` | `2` | Automatic depth of expanded JSON objects and arrays on first render |
+| `truncateStringLength` | `number` | `250` | Threshold length beyond which long strings are truncated with an expandable toggle |
+
+---
+
 ## Styling & Display Options
 
-The viewer styles and thresholds are defined internally in `swagger-pretty-json-view.js`:
+The viewer styles and thresholds provide:
 
 - **Adaptive HTTP Color Coding**: Automatically themes the viewer border, badges, and headers based on the endpoint HTTP verb (`GET`: `#61affe`, `POST`: `#49cc90`, `PUT`: `#fca130`, `DELETE`: `#f93e3e`).
-- **String Truncation**: Strings exceeding 250 characters are previewed up to 120 characters with a clickable toggle to show the full string without blowing out the layout.
+- **String Truncation**: Strings exceeding `truncateStringLength` characters are previewed with a clickable toggle to show the full string without overflowing the layout.
 - **Toolbar Actions**:
-  - **Espandi tutto**: Expands all child object and array nodes at once.
-  - **Comprimi tutto**: Collapses all child levels.
-  - **Copia**: Copies formatted, indented JSON to the clipboard.
-  - **Scarica**: Triggers a browser download of the response as a `.json` file.
-  - **Originale**: Toggles between this interactive tree view and Swagger UI's raw text response block.
+  - **Expand all**: Expands all child object and array nodes at once.
+  - **Collapse all**: Collapses all child levels.
+  - **Copy**: Copies formatted, indented JSON to the clipboard.
+  - **Download**: Triggers a browser download of the response as a `.json` file.
+  - **Raw / Pretty View**: Toggles between this interactive tree view and Swagger UI's raw text response block.

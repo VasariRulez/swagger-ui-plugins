@@ -53,13 +53,30 @@ app.UseSwaggerUI(c =>
 
 ## Configuration Reference
 
-The studio is pre-configured via the internal `CONFIG` block in `swagger-signalr-tester.js`:
+You can customize the studio presets and transport by defining `window.SwaggerSignalRConfig`:
 
-| Setting | Default | Description |
+```html
+<script>
+  window.SwaggerSignalRConfig = {
+    hubs: [
+      { name: "Notifications Hub", url: "/hubs/notifications" },
+      { name: "Live Chat Hub", url: "/hubs/chat" },
+      { name: "Telemetry Hub", url: "/hubs/telemetry" }
+    ],
+    defaultListeners: ["ReceiveMessage", "Notification", "StatusChanged"],
+    transport: "WebSockets", // Optional: "WebSockets" | "ServerSentEvents" | "LongPolling"
+    autoReconnect: true       // Optional: enable automatic reconnect with exponential backoff
+  };
+</script>
+<script src="/plugins/signalr-tester/swagger-signalr-tester.js"></script>
+```
+
+| Setting | Type | Description |
 | :--- | :--- | :--- |
-| `DEFAULT_HUB_PRESETS` | Pre-populated common hub routes | Suggested hub routes displayed in the dropdown menu |
-| `DEFAULT_EVENT_LISTENERS` | Common notification events | Suggested broadcast events populated in the listener dropdown |
-| `STORAGE_KEYS` | Prefixed `swp_signalr_*` | Keys used in `localStorage` to persist active hub URL, listeners, and arguments across reloads |
+| `hubs` | `Array<{name, url}>` | List of hub presets shown in the hub selector dropdown |
+| `defaultListeners` | `string[]` | Initial event names preloaded into listener tags |
+| `transport` | `string` | Force specific SignalR transport (`"WebSockets"`, `"LongPolling"`, `"ServerSentEvents"`) |
+| `autoReconnect` | `boolean` | Enable automatic reconnection logic (`withAutomaticReconnect()`) |
 
 > [!TIP]
 > You do not need to modify the code to connect to your hub: you can directly type any relative (`/hubs/my-hub`) or absolute (`https://api.domain.com/hubs/my-hub`) hub URL directly in the studio's input field.

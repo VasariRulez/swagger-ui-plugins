@@ -1,36 +1,26 @@
 /**
  * @file swagger-dto-presets.js
- * @summary Plugin per la generazione e applicazione automatica di Preset DTO e Payload Polimorfici
- *          su Swagger UI (OpenAPI / REST) a ZERO INTERVENTO UMANO.
+ * @summary DTO Presets, Polymorphic Mock Payloads & Favorites plugin for Swagger UI (OpenAPI / REST).
+ *          Automatically generates accurate request body payloads for polymorphic schemas ($type/discriminator),
+ *          injects predefined host presets, and enables custom developer favorites saved to localStorage.
  *
- * --- FLUSSO ARCHITETTURALE ---
- * 1. Ispezione Dinamica della Specifica OpenAPI:
- *    - Legge lo store Redux di Swagger (`ui.getState().get("spec")`) per ottenere definizioni e schemi.
- *    - Non richiede configurazioni manuali: rileva in automatico i DTO, i campi obbligatori/opzionali
- *      e le gerarchie polimorfiche (`oneOf` / `anyOf` / `allOf` / `discriminator`).
- * 2. Rilevamento Polimorfismo Intelligente:
- *    - Quando una proprietà del comando o DTO è polimorfica (es. 'Contract' in CreateContractProposalCommand
- *      con derivazioni Permanent, FixedTerm, Apprenticeship, Internship, Freelance):
- *      -> Genera automaticamente un preset dedicato per ciascun sottotipo!
- *      -> Inietta in automatico il discriminatore '$type' con il valore della classe corrispondente.
- * 3. Template Universali per QUALSIASI Endpoint:
- *    - "✨ Template Minimo": contiene solo i campi con vincolo [Required].
- *    - "📋 Template Completo": contiene tutti i campi con valori fittizi realistici (Guid, Date, Enum, ecc.).
- * 4. Preset Personalizzati dello Sviluppatore ("I Miei Preset"):
- *    - Permette di modificare un JSON nella textarea e cliccare "💾 Salva" per memorizzarlo
- *      nel LocalStorage del browser sotto un nome personalizzato, riutilizzabile in ogni momento.
- * 5. Iniezione Contestuale nella UI di Swagger:
- *    - Inietta una toolbar compatta ed elegante subito sopra la textarea del Request Body.
- *    - Se l'endpoint non è ancora in modalità "Try it out", la attiva automaticamente alla selezione
- *      di un preset per consentire la compilazione immediata.
- *    - Usa la tecnica React synthetic event setter per garantire che lo stato di Swagger UI si aggiorni.
- * 6. Supporto Temi (Light / Dark Mode):
- *    - Coordinato al 100% con gli standard grafici di 'swagger-pretty-json-view.js' e 'swagger-jwt-inspector.js'.
- *
- * --- GUIDA ALLA MANUTENZIONE PER SVILUPPATORI ---
- * - Per modificare i prefissi di LocalStorage: Aggiornare `CONFIG.STORAGE_KEY_PREFIX`.
- * - Per personalizzare i valori fittizi di default: Aggiornare `CONFIG.DUMMY_DEFAULTS`.
- * - Per modificare gli stili dei temi: Aggiornare `injectStyles()`.
+ * --- ARCHITECTURAL FLOW ---
+ * 1. Dynamic OpenAPI Specification Inspection:
+ *    - Reads Swagger Redux store (`ui.getState().get("spec")`) to inspect schemas and components.
+ *    - Detects required/optional fields and inheritance hierarchies (`oneOf`, `anyOf`, `allOf`, `discriminator`).
+ * 2. Smart Polymorphic Generation:
+ *    - Automatically generates dedicated presets for each derived subtype and injects the discriminator ($type).
+ * 3. Universal Built-in Templates:
+ *    - "✨ Minimal Template": contains only strictly required fields.
+ *    - "📋 Full Template": contains all schema properties populated with realistic mock values.
+ * 4. Predefined Host Presets & Developer Favorites:
+ *    - Supports `window.SwaggerPresetsConfig` for predefined endpoint templates.
+ *    - Allows saving custom request bodies to browser localStorage for instant 1-click reuse.
+ * 5. Contextual Swagger UI Injection:
+ *    - Injects a compact toolbar directly above the Request Body textarea.
+ *    - Automatically activates "Try it out" when a preset is selected and dispatches React synthetic events.
+ * 6. Theme Integration:
+ *    - Fully compatible with Swagger UI Light and Dark modes.
  */
 (() => {
     "use strict";
@@ -39,16 +29,16 @@
     // 1. CONFIGURAZIONE GENERALE (Modificabile dallo sviluppatore)
     // =========================================================================
     const CONFIG = {
-        /** Prefisso per le chiavi nel LocalStorage per i preset salvati dall'utente */
+        /** LocalStorage key prefix for user-saved custom presets */
         STORAGE_KEY_PREFIX: "swp_swagger_preset_",
 
-        /** Classe CSS della toolbar inserita sopra la textarea */
+        /** CSS class for toolbar injected above request body textarea */
         TOOLBAR_CLASS: "swagger-dto-presets-toolbar",
 
-        /** Intervallo di polling per il caricamento iniziale di window.ui (ms) */
+        /** Polling interval for initial window.ui readiness (ms) */
         DISCOVERY_INTERVAL_MS: 200,
 
-        /** Timeout massimo di attesa caricamento di window.ui (ms) */
+        /** Maximum timeout waiting for window.ui (ms) */
         DISCOVERY_TIMEOUT_MS: 30000,
 
         /** Valori predefiniti realistici per i tipi primitivi nello schema generator */
@@ -69,7 +59,7 @@
     // =========================================================================
 
     /**
-     * Rimuove eventuali caratteri invisibili zero-width (\u200B) iniettati da Swagger UI.
+     * Cleans zero-width characters (\u200B) injected by Swagger UI.
      * @param {string} str
      * @returns {string}
      */
@@ -94,7 +84,7 @@
     }
 
     /**
-     * Verifica se il tema scuro è attivo nella pagina.
+     * Checks if dark mode is active on the page.
      * @returns {boolean}
      */
     function isDarkModeActive() {
@@ -140,7 +130,7 @@
             const ui = window.ui;
             if (!ui) return null;
 
-            // Tentativo 1: Tramite getter dello store Redux
+            // Attempt 1: Via Redux store getter
             const state = ui.getState && ui.getState();
             if (state) {
                 const specData = state.get("spec")?.get("json");
@@ -242,7 +232,7 @@
     }
 
     /**
-     * Rileva se all'interno dello schema è presente una proprietà polimorfica (con oneOf/anyOf).
+     * Detects if schema contains a polymorphic property (oneOf/anyOf).
      * @param {object} schema
      * @param {object} spec
      * @returns {Array<{ propertyName: string, discriminatorProp: string, variants: Array<{ label: string, discriminatorVal: string, schema: object }> }>}
@@ -258,7 +248,7 @@
                 targetDef = resolveSchemaRef(targetDef.$ref, spec) || targetDef;
             }
 
-            // Verifica presenza di oneOf o anyOf
+            // Check for presence of oneOf or anyOf
             const subTypes = targetDef.oneOf || targetDef.anyOf;
             if (Array.isArray(subTypes) && subTypes.length > 0) {
                 const variants = [];
@@ -268,9 +258,9 @@
                     const resolvedSub = subRefObj.$ref ? resolveSchemaRef(subRefObj.$ref, spec) : subRefObj;
                     if (!resolvedSub) return;
 
-                    // Estrae il nome pulito della classe DTO (es. "PermanentContractDto")
+                    // Extract clean DTO class name (e.g. "SubtypeDto")
                     const rawName = subRefObj.$ref ? subRefObj.$ref.split("/").pop() : (resolvedSub.title || "Variante");
-                    // Rimuove 'Dto' e 'Contract' ridondanti per rendere la label leggibile
+                    // Strip redundant 'Dto' or suffixes to keep labels clean
                     const cleanLabel = rawName
                         .replace(/ContractDto$/i, "")
                         .replace(/Dto$/i, "");
@@ -308,7 +298,7 @@
     }
 
     /**
-     * Genera un valore di esempio realistico per una singola proprietà dello schema.
+     * Generates realistic mock sample value for a single schema property.
      * Gestisce puntualmente:
      * - Default ed Example esposti dal Backend (priorità assoluta)
      * - Wrapper allOf utilizzati da Swashbuckle per applicare attributi a $ref
@@ -340,7 +330,7 @@
         }
 
         // 3. RECUPERO DEFAULT ED EXAMPLE ESPOSTI DAL BACKEND (Priorità Assoluta)
-        // Verifica sia sulla proprietà nel modello (rawPropSchema) che nello schema referenziato (propSchema)
+        // Check both raw property schema in model and referenced schema
         const explicitExample = rawPropSchema.example !== undefined ? rawPropSchema.example : propSchema.example;
         const explicitDefault = rawPropSchema.default !== undefined ? rawPropSchema.default : propSchema.default;
 
@@ -508,7 +498,7 @@
                 continue;
             }
 
-            // Se per questa proprietà è stata selezionata una specifica variante polimorfica:
+            // If a polymorphic variant has been chosen for this property:
             if (polyOverride[propName]) {
                 const variant = polyOverride[propName];
                 const variantSchema = getMergedSchema(variant.schema, spec);
@@ -536,11 +526,28 @@
      * Struttura di un Preset generato:
      * @typedef {object} DtoPreset
      * @property {string} id - Identificativo unico del preset
-     * @property {string} label - Titolo mostrato nel dropdown
+     * @property {string} label - Display label in dropdown
      * @property {string} group - Raggruppamento (Polimorfismo, Standard, Personali)
      * @property {object} payload - Oggetto JSON del payload
-     * @property {boolean} isCustom - Se è stato creato dall'utente e salvato in localStorage
+     * @property {boolean} isCustom - Whether created by user and saved in localStorage
      */
+
+    /**
+     * Resolves predefined presets configured in window.SwaggerPresetsConfig for a given method and path.
+     * @param {string} method
+     * @param {string} path
+     * @returns {Array<Object>}
+     */
+    function getGlobalPresetsForEndpoint(method, path) {
+        const globalConfig = window.SwaggerPresetsConfig;
+        if (!globalConfig || typeof globalConfig !== "object") return [];
+
+        const normalizedUpper = `${method.toUpperCase()} ${path}`;
+        const normalizedLower = `${method.toLowerCase()} ${path}`;
+        const match = globalConfig[normalizedUpper] || globalConfig[normalizedLower] || globalConfig[path];
+
+        return Array.isArray(match) ? match : [];
+    }
 
     /**
      * Risolve lo schema del requestBody dell'operazione e genera tutti i preset disponibili.
@@ -567,11 +574,25 @@
         const rootSchema = getMergedSchema(jsonContent.schema, spec);
         const presets = [];
 
-        // 1. RILEVAMENTO POLIMORFISMO AUTOMATICO (es. ContractDto)
+        // 1. GLOBAL PRESETS FROM HOST CONFIGURATION (window.SwaggerPresetsConfig)
+        const globalPresets = getGlobalPresetsForEndpoint(method, path);
+        globalPresets.forEach((gp, idx) => {
+            if (gp && gp.payload) {
+                presets.push({
+                    id: `global_${idx}_${Date.now()}`,
+                    label: `🌐 ${gp.name || 'Predefined Preset'}`,
+                    group: "Predefined Host Presets",
+                    payload: gp.payload,
+                    isCustom: false,
+                    isGlobal: true
+                });
+            }
+        });
+
+        // 2. AUTOMATIC POLYMORPHISM DISCOVERY ($type / discriminators)
         const polySlots = findPolymorphicSlots(rootSchema, spec);
 
         if (polySlots.length > 0) {
-            // Per ciascuna proprietà polimorfica rilevata, crea un preset per ogni sottotipo
             for (const slot of polySlots) {
                 for (const variant of slot.variants) {
                     const payload = generateSampleFromSchema(rootSchema, spec, {
@@ -588,7 +609,7 @@
                     presets.push({
                         id: `poly_${slot.propertyName}_${variant.discriminatorVal}`,
                         label: `${variant.label} (${slot.propertyName})`,
-                        group: "Polimorfismo / Sottotipi",
+                        group: "Polymorphic Variants",
                         payload: payload,
                         isCustom: false
                     });
@@ -596,35 +617,34 @@
             }
         }
 
-        // 2. TEMPLATE UNIVERSALI (Minimo e Completo)
+        // 3. UNIVERSAL TEMPLATES (Full Sample & Minimal Required)
         const fullPayload = generateSampleFromSchema(rootSchema, spec, { minimalOnly: false });
         presets.push({
             id: "standard_full",
-            label: "Template Completo (Tutti i campi)",
-            group: "Template Automatici OpenAPI",
+            label: "Full Sample (All Fields)",
+            group: "OpenAPI Auto Templates",
             payload: fullPayload,
             isCustom: false
         });
 
         const minimalPayload = generateSampleFromSchema(rootSchema, spec, { minimalOnly: true });
-        // Inserisci il minimale solo se ha meno campi del completo
         if (Object.keys(minimalPayload).length > 0 && Object.keys(minimalPayload).length < Object.keys(fullPayload).length) {
             presets.push({
                 id: "standard_minimal",
-                label: "Template Minimo (Solo campi [Required])",
-                group: "Template Automatici OpenAPI",
+                label: "Minimal Required Fields",
+                group: "OpenAPI Auto Templates",
                 payload: minimalPayload,
                 isCustom: false
             });
         }
 
-        // 3. PRESET PERSONALIZZATI DELLO SVILUPPATORE (LocalStorage)
+        // 4. CUSTOM DEVELOPER PRESETS (LocalStorage)
         const customPresets = loadCustomPresetsForEndpoint(method, path);
         for (const custom of customPresets) {
             presets.push({
                 id: `custom_${custom.id}`,
                 label: `★ ${custom.name}`,
-                group: "I Miei Preset Salvati",
+                group: "Saved Custom Presets",
                 payload: custom.payload,
                 isCustom: true,
                 rawCustomId: custom.id
@@ -649,7 +669,7 @@
     }
 
     /**
-     * Carica i preset salvati dallo sviluppatore per un endpoint.
+     * Loads user-saved custom presets for an endpoint from localStorage.
      * @param {string} method
      * @param {string} path
      * @returns {Array<{ id: string, name: string, payload: object }>}
@@ -664,7 +684,7 @@
     }
 
     /**
-     * Salva un nuovo preset personalizzato per un endpoint.
+     * Saves a custom preset for an endpoint to localStorage.
      * @param {string} method
      * @param {string} path
      * @param {string} name
@@ -728,7 +748,7 @@
                 box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
             }
 
-            /* --- Titolo e Icona della Toolbar --- */
+            /* --- Toolbar Title and Icon --- */
             .swagger-presets-title {
                 display: inline-flex;
                 align-items: center;
@@ -802,7 +822,7 @@
                 color: #0f172a;
             }
 
-            /* Pulsante Inserisci Primario */
+            /* Primary Insert Button */
             .swagger-presets-btn-primary {
                 background: #0284c7;
                 color: #ffffff;
@@ -884,7 +904,7 @@
     }
 
     // =========================================================================
-    // 7. RENDERING DELLA TOOLBAR NEL BODY-PARAM DI SWAGGER UI
+    // 7. TOOLBAR RENDERING IN SWAGGER UI BODY PARAM
     // =========================================================================
 
     /**
@@ -894,7 +914,7 @@
     function mountToolbarInOpblock(opblock) {
         if (!opblock || opblock.querySelector(`.${CONFIG.TOOLBAR_CLASS}`)) return;
 
-        // Estrae il metodo HTTP e il path dall'intestazione dell'opblock
+        // Extract HTTP method and route path from opblock header
         const methodEl = opblock.querySelector(".opblock-summary-method");
         const pathEl = opblock.querySelector(".opblock-summary-path");
         if (!methodEl || !pathEl) return;
@@ -904,7 +924,7 @@
 
         // Genera i preset a runtime dall'OpenAPI spec
         const presets = buildPresetsForOperation(method, path);
-        if (presets.length === 0) return; // Nessun requestBody su questa operazione
+        if (presets.length === 0) return; // No requestBody on this operation
 
         // Individua il container dove montare la toolbar (sezione parameters o body-param)
         const targetContainer =
@@ -913,11 +933,11 @@
             opblock.querySelector(".opblock-body");
         if (!targetContainer) return;
 
-        // Costruzione HTML della toolbar
+        // Construct toolbar DOM elements
         const toolbar = document.createElement("div");
         toolbar.className = CONFIG.TOOLBAR_CLASS;
 
-        // Costruzione delle opzioni raggruppate (<optgroup>)
+        // Construct grouped dropdown options (<optgroup>)
         const groups = {};
         presets.forEach((p) => {
             if (!groups[p.group]) groups[p.group] = [];
@@ -934,27 +954,27 @@
         }
 
         toolbar.innerHTML = `
-            <span class="swagger-presets-title">🧩 Preset DTO:</span>
-            <select class="swagger-presets-select" title="Seleziona una variante polimorfica o un template automatico">
+            <span class="swagger-presets-title">🧩 DTO Presets:</span>
+            <select class="swagger-presets-select" title="Select a polymorphic variant, predefined preset, or saved favorite">
                 ${optionsHtml}
             </select>
-            <button type="button" class="swagger-presets-btn swagger-presets-btn-primary btn-apply" title="Applica il payload selezionato nella textarea del body">
-                ✓ Inserisci
+            <button type="button" class="swagger-presets-btn swagger-presets-btn-primary btn-apply" title="Apply selected payload into request body textarea">
+                ✓ Apply
             </button>
-            <button type="button" class="swagger-presets-btn btn-copy" title="Copia negli appunti il payload JSON selezionato">
-                📋 Copia
+            <button type="button" class="swagger-presets-btn btn-copy" title="Copy selected JSON payload to clipboard">
+                📋 Copy
             </button>
-            <button type="button" class="swagger-presets-btn btn-save" title="Salva il contenuto corrente della textarea come preset personalizzato">
-                💾 Salva
+            <button type="button" class="swagger-presets-btn btn-save" title="Save current textarea contents as a custom preset">
+                💾 Save
             </button>
-            <button type="button" class="swagger-presets-btn btn-delete" style="display:none;" title="Elimina il preset personalizzato selezionato">
-                ✕ Elimina
+            <button type="button" class="swagger-presets-btn btn-delete" style="display:none;" title="Delete selected custom preset">
+                ✕ Delete
             </button>
             <span class="swagger-presets-feedback"></span>
-            <span class="swagger-presets-badge">Auto OpenAPI</span>
+            <span class="swagger-presets-badge">OpenAPI</span>
         `;
 
-        // Referenze agli elementi della toolbar
+        // Toolbar DOM element references
         const selectEl = toolbar.querySelector(".swagger-presets-select");
         const btnApply = toolbar.querySelector(".btn-apply");
         const btnCopy = toolbar.querySelector(".btn-copy");
@@ -962,7 +982,7 @@
         const btnDelete = toolbar.querySelector(".btn-delete");
         const feedbackEl = toolbar.querySelector(".swagger-presets-feedback");
 
-        /** Mostra un feedback visivo temporaneo */
+        /** Displays temporary visual feedback */
         const showFeedback = (msg) => {
             feedbackEl.innerHTML = `<span class="swagger-presets-flash">${escapeHtml(msg)}</span>`;
             setTimeout(() => {
@@ -970,14 +990,14 @@
             }, 1800);
         };
 
-        /** Ritorna il preset attualmente selezionato nel dropdown */
+        /** Returns currently selected preset from dropdown */
         const getSelectedPreset = () => {
             const selectedId = selectEl.value;
             if (!selectedId) return null;
             return presets.find((p) => p.id === selectedId) || null;
         };
 
-        // Gestione visibilità tasto "Elimina" se il preset selezionato è custom
+        // Manage visibility of Delete button if selected preset is custom
         selectEl.addEventListener("change", () => {
             const preset = getSelectedPreset();
             if (preset && preset.isCustom) {
@@ -988,7 +1008,7 @@
         });
 
         /**
-         * Applica il JSON selezionato nella textarea di Swagger UI.
+         * Applies selected JSON payload into Swagger UI textarea.
          */
         const applyPreset = () => {
             const preset = getSelectedPreset();
@@ -1003,7 +1023,7 @@
                 tryOutBtn.click();
             }
 
-            // 2. Attende che React monti la textarea (se appena attivato Try it out)
+            // 2. Wait for React to mount textarea if Try it out was just toggled
             const jsonText = JSON.stringify(preset.payload, null, 2);
 
             let attempts = 0;
@@ -1017,14 +1037,14 @@
                     showFeedback("✓ Payload inserito!");
                 } else if (attempts >= 15) {
                     clearInterval(pollTextarea);
-                    console.warn("[Swagger Presets] Impossibile trovare la textarea del body in questo endpoint.");
+                    console.warn("[Swagger Presets] Unable to find request body textarea for this endpoint.");
                 }
             }, 40);
         };
 
         btnApply.addEventListener("click", applyPreset);
 
-        // Copia il JSON negli appunti
+        // Copy JSON to clipboard
         btnCopy.addEventListener("click", () => {
             const preset = getSelectedPreset();
             if (!preset) {
@@ -1036,10 +1056,10 @@
             navigator.clipboard
                 .writeText(jsonText)
                 .then(() => showFeedback("📋 Copiato!"))
-                .catch(() => alert("Impossibile copiare negli appunti."));
+                .catch(() => alert("Unable to copy to clipboard."));
         });
 
-        // Salva il contenuto corrente come Preset Personalizzato
+        // Save current content as custom preset
         btnSave.addEventListener("click", () => {
             const textarea = opblock.querySelector("textarea.body-param__text") || opblock.querySelector("textarea");
             const rawContent = textarea ? textarea.value.trim() : "";
@@ -1053,17 +1073,17 @@
             try {
                 parsed = JSON.parse(rawContent);
             } catch {
-                alert("Il contenuto della textarea non è un JSON valido.");
+                alert("Textarea content is not valid JSON.");
                 return;
             }
 
-            const name = prompt("Inserisci un nome per questo preset personalizzato:", "Il mio test");
+            const name = prompt("Enter a name for this custom preset:", "My test preset");
             if (!name || !name.trim()) return;
 
             saveCustomPresetForEndpoint(method, path, name.trim(), parsed);
             showFeedback("💾 Salvato!");
 
-            // Ricostruisce la toolbar per mostrare subito il nuovo preset
+            // Rebuild toolbar to show new preset
             toolbar.remove();
             mountToolbarInOpblock(opblock);
         });
@@ -1080,7 +1100,7 @@
             }
         });
 
-        // Inserisce la toolbar prima della textarea/options del body-param
+        // Insert toolbar before body-param textarea
         const bodyParam = opblock.querySelector(".opblock-body .body-param");
         if (bodyParam) {
             bodyParam.insertBefore(toolbar, bodyParam.firstChild);
@@ -1118,7 +1138,7 @@
 
                 window.addEventListener("swagger-activity-bar:ready", registerGuideDocumentation);
 
-                // Observer per intercettare l'apertura dinamica degli endpoint (.opblock.is-open)
+                // Observer to intercept dynamic opening of endpoints (.opblock.is-open)
                 const observer = new MutationObserver(() => {
                     scanAndMountToolbars();
                 });
@@ -1130,7 +1150,7 @@
                     attributeFilter: ["class"]
                 });
 
-                console.info("[Swagger Presets] Plugin DTO Presets & Polymorphic Generator inizializzato con successo.");
+                console.info("[Swagger Presets] DTO Presets & Polymorphic Generator module initialized successfully.");
             }
 
             if (Date.now() - startTime >= CONFIG.DISCOVERY_TIMEOUT_MS) {
@@ -1142,7 +1162,7 @@
     let isGuideRegistered = false;
 
     /**
-     * Pubblica i metadati e la documentazione del plugin nella guida interattiva dell'Activity Bar (ID 27).
+     * Publishes plugin metadata and documentation to interactive Activity Bar guide.
      */
     function registerGuideDocumentation() {
         if (isGuideRegistered) return;
@@ -1150,13 +1170,13 @@
             isGuideRegistered = true;
             window.SwaggerActivityBar.registerPluginGuide({
                 id: "dto-presets",
-                name: "Preset DTO & Mock Polimorfici",
+                name: "DTO Presets & Polymorphic Mocks",
                 version: "1.0.0",
-                description: "Generatore automatico di payload per DTO polimorfici (Permanent, FixedTerm, Stage, P.IVA) con valori mock validi.",
+                description: "Automatic request body generator for polymorphic schemas ($type/discriminators), predefined host presets, and custom developer favorites.",
                 shortcuts: [
-                    "Menu Preset: Seleziona la variante di DTO da inserire nel Request Body",
-                    "Salva Preset: Salva un payload personalizzato nei preferiti locali",
-                    "Ripristina Originale: Reimposta lo schema Swagger iniziale"
+                    "Preset Menu: Select DTO variant to insert into Request Body",
+                    "Save Preset: Save custom payload to local favorites",
+                    "Reset: Restore initial Swagger schema template"
                 ],
                 iconHtml: `
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1168,14 +1188,14 @@
                     </svg>
                 `,
                 manual: `
-### Panoramica
-Risolve il problema dei DTO polimorfici (es. gerarchia \`ContractDto\` con discriminatore \`$type\` per contratti a tempo indeterminato, determinato, apprendistato, stage o freelance) dove lo Swagger UI standard mostra solo i campi comuni della classe base.
+### Overview
+Solves the challenge of polymorphic DTO hierarchies (such as schemas with discriminator \`$type\` and multiple subtypes) where standard Swagger UI only shows base model fields.
 
-### Come Usarlo
-Quando apri un endpoint con body JSON:
-1. Compare una toolbar sopra il Request Body con il selettore **"Inserisci Preset DTO"**.
-2. Scegli il sottotipo desiderato: il payload viene generato istantaneamente con tutti i campi specifici e valori mock coerenti (GUID, date UTC, email, importi).
-3. Puoi memorizzare le tue configurazioni ricorrenti tramite il pulsante **"Salva nei Preferiti"** in \`localStorage\`.
+### How to Use
+When expanding an endpoint with a JSON request body:
+1. A toolbar appears above the Request Body with the **"DTO Presets"** dropdown.
+2. Select any desired subtype or template: payload is instantly populated with all specific subtype fields and realistic mock values.
+3. Save recurring configurations using the **"Save"** button into local browser storage.
 `
             });
         }

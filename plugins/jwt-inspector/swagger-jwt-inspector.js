@@ -1,66 +1,74 @@
 /**
  * @file swagger-jwt-inspector.js
- * @summary Plugin per Swagger UI che visualizza lo stato del token JWT in tempo reale
- *          (status bar con countdown) e permette l'ispezione approfondita di claims, ruoli
- *          e scadenze sia del token applicativo (Bearer) sia di Microsoft Entra ID (MSAL).
+ * @summary JWT Claims & Token Inspector plugin for Swagger UI.
+ *          Visualizes active JWT token status with real-time countdown, roles, and provides
+ *          deep claims inspection for application Bearer tokens and Microsoft Entra ID (MSAL).
  *
- * --- FLUSSO ARCHITETTURALE ---
- * 1. Attende l'inizializzazione di Swagger UI (window.ui) e dello store Redux sottostante.
- * 2. Inietta una Status Bar elegante all'interno della barra superiore di Swagger UI (.topbar-wrapper).
- * 3. Monitora lo store Redux: non appena lo schema 'Bearer' o 'MsalAuth' viene autorizzato:
- *    - Estrae il token JWT attivo.
- *    - Decodifica il payload JSON (Base64Url conforme a caratteri UTF-8).
- *    - Aggiorna il badge con: Nome utente, Ruoli principali e Countdown alla scadenza in tempo reale.
- * 4. Al click sul badge, apre una finestra modale interattiva (JWT Inspector) che offre:
- *    - Switch rapido tra Token Applicativo (Bearer) e Token Microsoft (MSAL).
- *    - Tabella riassuntiva dei claim chiave (Nome, Email, Ruoli, Tenant, Scadenza, Emissione).
- *    - Visualizzazione JSON formattata dell'intero payload con syntax highlighting.
- *    - Pulsanti rapidi "Copia Token JWT grezzo" e "Copia Payload JSON".
- * 5. Alla disconnessione (logout), la status bar torna allo stato "Non autenticato" e chiude eventuali modali aperti.
- *
- * --- GUIDA ALLA MANUTENZIONE PER SVILUPPATORI ---
- * - Per modificare i colori, font o stili grafici: Aggiornare le variabili CSS in `STYLE_CONFIG`.
- * - Per modificare le soglie di warning del countdown: Modificare `CONFIG.WARNING_THRESHOLD_SECONDS`.
- * - Per aggiungere o personalizzare i claim evidenziati nella tabella: Modificare `SUMMARY_CLAIMS_MAPPING`.
- * - Per cambiare i nomi degli schemi OpenAPI monitorati: Modificare `CONFIG.APP_BEARER_SCHEME` o `CONFIG.MSAL_SCHEME`.
+ * --- ARCHITECTURAL FLOW ---
+ * 1. Observes Swagger UI Redux store and optional local storage fallback keys.
+ * 2. Injects a status bar into Swagger UI top navigation.
+ * 3. When an authentication scheme is authorized:
+ *    - Decodes JWT payload (UTF-8 Base64Url).
+ *    - Displays username, roles, and expiration countdown.
+ * 4. Clicking the badge opens an interactive modal with:
+ *    - Scheme switching between App Bearer and MSAL tokens.
+ *    - Summary table of primary claims (Subject, Issuer, Audience, Roles, Expiration).
+ *    - Formatted JSON payload view.
+ *    - 1-click external debugger button (jwt.ms / jwt.io).
+ *    - Copy raw token and payload actions.
+ * 5. On logout, resets status bar and removes modals.
  */
 (() => {
     "use strict";
 
     // =========================================================================
-    // 1. CONFIGURAZIONE GENERALE (Modificabile dallo sviluppatore)
+    // 1. GENERAL CONFIGURATION (Host Injection & Defaults)
     // =========================================================================
+    const userConfig = window.SwaggerJwtConfig || {};
+
     const CONFIG = {
-        /** Nome identificativo dello schema Bearer registrato in AddSecurityDefinition in C# */
-        APP_BEARER_SCHEME: "Bearer",
+        /** Security scheme identifier for application Bearer tokens */
+        APP_BEARER_SCHEME: userConfig.appSchemeName || "Bearer",
 
-        /** Nome identificativo dello schema MSAL registrato in AddSecurityDefinition in C# */
-        MSAL_SCHEME: "MsalAuth",
+        /** Security scheme identifier for IDP / MSAL tokens */
+        MSAL_SCHEME: userConfig.msalSchemeName || "MsalAuth",
 
-        /** Frequenza in millisecondi per l'aggiornamento del countdown a video */
+        /** UI countdown refresh interval in milliseconds */
         COUNTDOWN_TICK_INTERVAL_MS: 1000,
 
-        /** Soglia in secondi sotto la quale il badge diventa arancione (avviso pre-scadenza) */
-        WARNING_THRESHOLD_SECONDS: 120,
+        /** Warning threshold in seconds before expiration when badge turns amber */
+        WARNING_THRESHOLD_SECONDS: typeof userConfig.expiringThresholdMinutes === "number"
+            ? Math.max(10, Math.round(userConfig.expiringThresholdMinutes * 60))
+            : 120,
 
-        /** Intervallo di polling per attendere il caricamento di Swagger UI */
+        /** Preferred external JWT debugger link: "jwt.ms" | "jwt.io" */
+        EXTERNAL_DEBUGGER: userConfig.externalDebugger === "jwt.io" ? "jwt.io" : "jwt.ms",
+
+        /** Fallback localStorage keys to inspect for tokens */
+        FALLBACK_STORAGE_KEYS: Array.isArray(userConfig.tokenStorageKeys) ? userConfig.tokenStorageKeys : [
+            "swp_bearer_token",
+            "access_token",
+            "id_token"
+        ],
+
+        /** Polling discovery interval for Swagger UI mounting */
         UI_DISCOVERY_INTERVAL_MS: 200,
 
-        /** Timeout massimo di attesa caricamento di window.ui */
+        /** Maximum timeout for discovering window.ui */
         UI_DISCOVERY_TIMEOUT_MS: 30000,
 
-        /** ID elemento DOM per il contenitore della barra di stato */
+        /** DOM element ID for the status bar container */
         STATUS_BAR_ELEMENT_ID: "swagger-jwt-status-bar",
 
-        /** ID elemento DOM per il modale dell'inspector */
+        /** DOM element ID for the inspector modal */
         MODAL_ELEMENT_ID: "swagger-jwt-inspector-modal",
 
-        /** ID dell'elemento style iniettato */
+        /** Injected style element ID */
         STYLE_ELEMENT_ID: "swagger-jwt-inspector-styles"
     };
 
     /**
-     * Mappatura dei claim standard e proprietari da evidenziare nella tabella di sintesi del modale.
+     * Standard and custom claims mapping highlighted in the modal summary table.
      * Struttura: { label: string, extract: (payload) => string[] | string | null }
      */
     const SUMMARY_CLAIMS_MAPPING = [
@@ -78,7 +86,7 @@
                 const roles = extractUserRoles(p);
                 if (Array.isArray(roles)) return roles.join(", ");
                 if (typeof roles === "string") return roles;
-                return "Nessun ruolo specifico";
+                return "No specific role";
             }
         },
         {
@@ -158,7 +166,7 @@
             const decodedString = new TextDecoder("utf-8").decode(bytes);
             return JSON.parse(decodedString);
         } catch (error) {
-            console.warn("[Swagger JWT Inspector] Errore di decodifica JWT:", error);
+            console.warn("[Swagger JWT Inspector] JWT decoding error:", error);
             return null;
         }
     }
@@ -184,7 +192,7 @@
     }
 
     /**
-     * Calcola la differenza temporale tra adesso e la data di scadenza e restituisce testo e stato visivo.
+     * Computes time difference until expiration timestamp and returns formatted text and visual status.
      * @param {number|null} expSeconds - Claim 'exp' in secondi Unix.
      * @returns {{ text: string, status: "ok"|"warning"|"expired"|"none" }}
      */
@@ -218,16 +226,16 @@
     }
 
     /**
-     * Copia una stringa di testo negli appunti di sistema mostrando un feedback visivo sul pulsante.
-     * @param {string} text - Testo da copiare.
-     * @param {HTMLElement} buttonElement - Pulsante su cui mostrare il feedback.
-     * @param {string} defaultLabel - Testo originario del pulsante.
+     * Copies text to system clipboard and displays visual feedback on button.
+     * @param {string} text - Text to copy.
+     * @param {HTMLElement} buttonElement - Button element to display feedback on.
+     * @param {string} defaultLabel - Default button label.
      */
     function copyToClipboard(text, buttonElement, defaultLabel) {
         if (!text) return;
 
         navigator.clipboard.writeText(text).then(() => {
-            buttonElement.textContent = "✓ Copiato!";
+            buttonElement.textContent = "✓ Copied!";
             buttonElement.classList.add("jwt-btn--copied");
 
             setTimeout(() => {
@@ -235,7 +243,7 @@
                 buttonElement.classList.remove("jwt-btn--copied");
             }, 1800);
         }).catch((err) => {
-            console.error("[Swagger JWT Inspector] Errore copia appunti:", err);
+            console.error("[Swagger JWT Inspector] Clipboard copy error:", err);
         });
     }
 
@@ -319,9 +327,8 @@
     // =========================================================================
 
     /**
-     * Rileva se la pagina Swagger UI è in modalità scura controllando la presenza della classe 'dark-mode'
-     * su <html> o <body>, esattamente nello stesso modo di swagger-pretty-json-view.js.
-     * @returns {boolean} true se è attiva la classe 'dark-mode', altrimenti false.
+     * Detects if dark mode is active by checking 'dark-mode' class on <html> or <body>.
+     * @returns {boolean} True if dark-mode is active, false otherwise.
      */
     function isDarkModeActive() {
         return Boolean(
@@ -331,7 +338,7 @@
     }
 
     /**
-     * Sincronizza la classe '--dark' sul modale se attualmente aperto.
+     * Synchronizes '--dark' class on modal if open.
      */
     function applyTheme() {
         const dark = isDarkModeActive();
@@ -342,8 +349,7 @@
     }
 
     /**
-     * Monitora le mutazioni della classe su <html> e <body> per aggiornare istantaneamente
-     * il tema del modale quando l'utente attiva o disattiva la dark-mode.
+     * Observes class mutations on <html> and <body> to update modal theme in real time.
      */
     function observeThemeChanges() {
         const observer = new MutationObserver((mutations) => {
@@ -383,7 +389,7 @@
                SWAGGER JWT INSPECTOR - STILI GRAFICI ADATTIVI (LIGHT & DARK THEME)
                ========================================================================= */
 
-            /* --- Status Bar nella Navbar di Swagger --- */
+            /* --- Status Bar in Swagger Navbar --- */
             #${CONFIG.STATUS_BAR_ELEMENT_ID} {
                 display: inline-flex;
                 align-items: center;
@@ -439,7 +445,7 @@
             .jwt-pill--warning { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); }
             .jwt-pill--expired { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(248, 113, 113, 0.3); }
 
-            /* --- Modale di Ispezione Completa (Default: Tema Chiaro ad Alto Contrasto) --- */
+            /* --- Inspection Modal (Default: High-contrast light theme) --- */
             .jwt-modal-overlay {
                 --jwt-overlay-bg: rgba(0, 0, 0, 0.55);
                 --jwt-bg-card: #ffffff;
@@ -476,7 +482,7 @@
                 animation: jwtFadeIn 0.2s ease-out;
             }
 
-            /* --- Modale Tema Scuro (Allineato a swagger-pretty-json-view.js) --- */
+            /* --- Modal Dark Theme --- */
             html.dark-mode .jwt-modal-overlay,
             body.dark-mode .jwt-modal-overlay,
             .jwt-modal-overlay--dark {
@@ -605,7 +611,7 @@
                 letter-spacing: 0.6px;
             }
 
-            /* --- Tabella Riepilogo Claims Chiave --- */
+            /* --- Primary Claims Summary Table --- */
             .jwt-summary-table {
                 width: 100%;
                 border-collapse: collapse;
@@ -699,11 +705,11 @@
     }
 
     // =========================================================================
-    // 5. RENDERING DELLA STATUS BAR (Barra di stato in Navbar)
+    // 5. STATUS BAR RENDERING IN NAVBAR
     // =========================================================================
 
     /**
-     * Inserisce o aggiorna la Status Bar all'interno della barra superiore di Swagger.
+     * Inserts or updates the Status Bar inside Swagger UI navigation bar.
      */
     function renderStatusBar() {
         let statusBar = document.getElementById(CONFIG.STATUS_BAR_ELEMENT_ID);
@@ -723,7 +729,7 @@
 
         const currentPayload = activePayloads.bearer || activePayloads.msal;
 
-        // Caso 1: Nessun utente autenticato
+        // Case 1: Unauthenticated
         if (!currentPayload) {
             statusBar.innerHTML = `
                 <span class="jwt-status-indicator jwt-indicator--unauth"></span>
@@ -766,14 +772,14 @@
     }
 
     // =========================================================================
-    // 6. RENDERING E GESTIONE MODALE (JWT Inspector Modal)
+    // 6. MODAL RENDERING & LIFECYCLE (JWT Inspector Modal)
     // =========================================================================
 
     /**
-     * Apre la finestra modale dell'inspector per esaminare in dettaglio i token.
+     * Opens inspector modal window to examine token details.
      */
     function openInspectorModal() {
-        closeInspectorModal(); // Chiude eventuali istanze orfane
+        closeInspectorModal(); // Close any orphaned instances
 
         // Determina la scheda iniziale
         if (!activeTokens.bearer && activeTokens.msal) {
@@ -811,7 +817,7 @@
     }
 
     /**
-     * Aggiorna dinamicamente i contenuti interni del modale (utilizzato anche al cambio di tab).
+     * Dynamically updates modal content (used also on tab switch).
      * @param {HTMLElement} cardElement
      */
     function updateModalContent(cardElement) {
@@ -821,7 +827,7 @@
         const currentToken = selectedInspectorTab === "bearer" ? activeTokens.bearer : activeTokens.msal;
         const currentPayload = selectedInspectorTab === "bearer" ? activePayloads.bearer : activePayloads.msal;
 
-        // Generazione righe tabella
+        // Generate summary table rows
         let tableRowsHtml = "";
         if (currentPayload) {
             SUMMARY_CLAIMS_MAPPING.forEach((claimDef) => {
@@ -839,20 +845,20 @@
             tableRowsHtml = `
                 <tr>
                     <td colspan="2" class="jwt-empty-notice">
-                        Nessun token presente per questa sessione.
+                        No token present for this session.
                     </td>
                 </tr>
             `;
         }
 
-        const formattedJson = currentPayload ? JSON.stringify(currentPayload, null, 2) : "Nessun dato decodificabile";
+        const formattedJson = currentPayload ? JSON.stringify(currentPayload, null, 2) : "No decodable data";
 
         cardElement.innerHTML = `
             <div class="jwt-modal-header">
                 <h3 class="jwt-modal-title">
                     <span>🪪</span> JWT Claims Inspector
                 </h3>
-                <button type="button" class="jwt-modal-close-btn" id="jwt-modal-btn-close" title="Chiudi">✕</button>
+                <button type="button" class="jwt-modal-close-btn" id="jwt-modal-btn-close" title="Close">✕</button>
             </div>
 
             <div class="jwt-modal-tabs">
@@ -886,15 +892,20 @@
 
             <div class="jwt-modal-footer">
                 <button type="button" class="jwt-action-btn" id="jwt-btn-copy-token" ${!currentToken ? "disabled" : ""}>
-                    📋 Copia Token JWT (Raw)
+                    📋 Copy JWT Token (Raw)
                 </button>
                 <button type="button" class="jwt-action-btn" id="jwt-btn-copy-payload" ${!currentPayload ? "disabled" : ""}>
-                    📄 Copia Payload JSON
+                    📄 Copy Payload JSON
                 </button>
+                ${currentToken ? `
+                    <a href="${CONFIG.EXTERNAL_DEBUGGER === 'jwt.io' ? `https://jwt.io/?token=${encodeURIComponent(currentToken)}` : `https://jwt.ms/#access_token=${encodeURIComponent(currentToken)}`}" target="_blank" rel="noopener noreferrer" class="jwt-action-btn jwt-action-btn-debugger" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
+                        🔗 Open in ${CONFIG.EXTERNAL_DEBUGGER}
+                    </a>
+                ` : ""}
             </div>
         `;
 
-        // Registrazione listener pulsanti modale
+        // Register modal button listeners
         cardElement.querySelector("#jwt-modal-btn-close").addEventListener("click", closeInspectorModal);
 
         const tabBearer = cardElement.querySelector("#jwt-tab-bearer");
@@ -913,20 +924,20 @@
         const copyTokenBtn = cardElement.querySelector("#jwt-btn-copy-token");
         if (copyTokenBtn && currentToken) {
             copyTokenBtn.addEventListener("click", () => {
-                copyToClipboard(currentToken, copyTokenBtn, "📋 Copia Token JWT (Raw)");
+                copyToClipboard(currentToken, copyTokenBtn, "📋 Copy JWT Token (Raw)");
             });
         }
 
         const copyPayloadBtn = cardElement.querySelector("#jwt-btn-copy-payload");
         if (copyPayloadBtn && currentPayload) {
             copyPayloadBtn.addEventListener("click", () => {
-                copyToClipboard(formattedJson, copyPayloadBtn, "📄 Copia Payload JSON");
+                copyToClipboard(formattedJson, copyPayloadBtn, "📄 Copy Payload JSON");
             });
         }
     }
 
     /**
-     * Chiude e distrugge l'eventuale finestra modale aperta.
+     * Closes and removes open modal window.
      */
     function closeInspectorModal() {
         const modal = document.getElementById(CONFIG.MODAL_ELEMENT_ID);
@@ -943,16 +954,31 @@
      * @returns {string|null}
      */
     function extractBearerToken(authorizedSchemes) {
-        if (!authorizedSchemes || typeof authorizedSchemes.get !== "function") return null;
-
-        const entry = authorizedSchemes.get(CONFIG.APP_BEARER_SCHEME);
-        if (!entry) return null;
-
-        if (typeof entry.get === "function") {
-            return entry.get("value") || null;
+        if (authorizedSchemes && typeof authorizedSchemes.get === "function") {
+            const entry = authorizedSchemes.get(CONFIG.APP_BEARER_SCHEME);
+            if (entry) {
+                if (typeof entry.get === "function") {
+                    const val = entry.get("value");
+                    if (val) return val;
+                } else if (entry.value) {
+                    return entry.value;
+                }
+            }
         }
 
-        return entry.value || null;
+        // Fallback to configured localStorage keys
+        if (Array.isArray(CONFIG.FALLBACK_STORAGE_KEYS)) {
+            for (const key of CONFIG.FALLBACK_STORAGE_KEYS) {
+                try {
+                    const stored = localStorage.getItem(key);
+                    if (stored && typeof stored === "string" && stored.split(".").length === 3) {
+                        return stored;
+                    }
+                } catch {}
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -999,7 +1025,7 @@
         if (changed) {
             renderStatusBar();
 
-            // Se il modale è attualmente aperto, rinfreschiamo anche la sua card
+            // If modal is currently open, refresh its content
             const openModalCard = document.querySelector(`#${CONFIG.MODAL_ELEMENT_ID} .jwt-modal-card`);
             if (openModalCard) {
                 updateModalContent(openModalCard);
@@ -1036,7 +1062,7 @@
 
                             updateTokensState(bearer, msal);
                         } catch (err) {
-                            console.warn("[Swagger JWT Inspector] Errore lettura stato auth:", err);
+                            console.warn("[Swagger JWT Inspector] Error reading auth state:", err);
                         }
                     });
 
@@ -1058,7 +1084,7 @@
             if (Date.now() - startTime >= CONFIG.UI_DISCOVERY_TIMEOUT_MS) {
                 window.clearInterval(checkInterval);
                 registerGuideDocumentation();
-                console.warn("[Swagger JWT Inspector] Timeout attesa caricamento Swagger UI.");
+                console.warn("[Swagger JWT Inspector] Discovery timeout waiting for Swagger UI.");
             }
         }, CONFIG.UI_DISCOVERY_INTERVAL_MS);
     }
@@ -1066,7 +1092,7 @@
     let isGuideRegistered = false;
 
     /**
-     * Pubblica i metadati e la documentazione del plugin nella guida interattiva dell'Activity Bar (ID 27).
+     * Publishes plugin metadata and documentation to interactive Activity Bar guide.
      */
     function registerGuideDocumentation() {
         if (isGuideRegistered) return;
@@ -1076,11 +1102,11 @@
                 id: "jwt-inspector",
                 name: "JWT Claims & Token Inspector",
                 version: "1.0.0",
-                description: "Decodifica in tempo reale i token JWT attivi (MSAL ed Exchange Bearer) con countdown di scadenza, ruoli e ispezione claims.",
+                description: "Decodes active JWT tokens (Bearer and MSAL) in real time with expiration countdown, roles, and claims inspection.",
                 shortcuts: [
-                    "Status Bar: Mostra utente, ruoli e minuti residui alla scadenza",
-                    "Ispeziona Claims: Apre la modale dettagliata con tabella claims",
-                    "Copia Token: Copia la stringa Bearer token negli appunti"
+                    "Status Bar: Displays user, roles, and remaining token lifetime",
+                    "Inspect Claims: Opens detailed modal with claims breakdown",
+                    "Copy Token: Copies raw Bearer token string to clipboard"
                 ],
                 iconHtml: `
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1089,25 +1115,26 @@
                     </svg>
                 `,
                 manual: `
-### Panoramica
-Fornisce piena trasparenza sull'identità dell'utente autenticato e sul ciclo di vita dei token in Swagger UI (sia token Entra ID Microsoft che Bearer applicativo dell'API).
+### Overview
+Provides complete transparency into authenticated user identity and token lifecycle in Swagger UI (supporting both Microsoft Entra ID and application Bearer tokens).
 
-### Barra di Stato
-Appare automaticamente sotto la sezione Authorize dopo il login:
-- **Identità & Ruoli**: mostra il nome dell'utente e i ruoli RBAC (es. \`Admin\`, \`Recruiter\`).
-- **Countdown Scadenza**: timer in tempo reale con avviso a 5 minuti dalla scadenza.
+### Status Bar
+Automatically displayed in the header upon authentication:
+- **Identity & Roles**: shows principal username and RBAC roles.
+- **Expiration Countdown**: real-time timer with color-coded warning as expiration approaches.
 
-### Modale Ispezione Claims
-Cliccando su **"Ispeziona Claims"** si apre la finestra con:
-- **Tabella Claims**: decodifica di tutti i claim (\`sub\`, \`iss\`, \`aud\`, \`exp\`, \`roles\`, \`tenant\`).
-- **Vista JSON**: payload completo con pulsanti per copiare il token o scaricarlo.
+### Claims Inspection Modal
+Clicking **"Inspect Claims"** opens the inspector modal:
+- **Claims Table**: decodes standard and proprietary claims (\`sub\`, \`iss\`, \`aud\`, \`exp\`, \`roles\`, \`tenant\`).
+- **Formatted JSON View**: inspect full decoded payload.
+- **External Debugger**: 1-click launch in jwt.ms or jwt.io.
 `
             });
         }
     }
 
     // =========================================================================
-    // 8. AVVIO PLUGIN
+    // 8. PLUGIN BOOTSTRAP
     // =========================================================================
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", initializeObserver);

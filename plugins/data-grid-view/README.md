@@ -58,14 +58,28 @@ The detection engine parses response bodies according to standard backend archit
 
 ## Configuration Reference
 
-The data grid behavior is defined via the internal `CONFIG` block in `swagger-data-grid-view.js`:
+You can customize the grid pagination and export behavior by declaring `window.SwaggerDataGridConfig`:
 
-| Setting | Default | Description |
-| :--- | :--- | :--- |
-| `DEFAULT_CLIENT_PAGE_SIZE` | `15` | Default number of records displayed per page |
-| `PAGE_SIZE_OPTIONS` | `[10, 15, 25, 50]` | Selectable page size choices in the table footer |
-| `PAGE_PARAM_NAMES` | `["page", "pageindex", ...]` | Query parameter names checked for server-side pagination |
-| `PAGE_SIZE_PARAM_NAMES`| `["pagesize", "limit", ...]` | Query parameter names checked for page size |
+```html
+<script>
+  window.SwaggerDataGridConfig = {
+    defaultPageSize: 25,                 // Initial rows per page (default: 15)
+    pageSizeOptions: [10, 25, 50, 100],  // Available choices in pagination dropdown (default: [10, 15, 25, 50])
+    getCsvFilename: function(path, method) {
+      // Custom dynamic CSV export filename
+      const cleanPath = path.replace(/[^a-zA-Z0-9]/g, "_");
+      return `data_${method.toLowerCase()}_${cleanPath}.csv`;
+    }
+  };
+</script>
+<script src="/plugins/data-grid-view/swagger-data-grid-view.js"></script>
+```
+
+| Setting | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `defaultPageSize` | `number` | `15` | Default number of records displayed per page |
+| `pageSizeOptions` | `number[]` | `[10, 15, 25, 50]` | Selectable page size choices in the table footer |
+| `getCsvFilename` | `function(path, method)` | Auto-generated name | Custom callback returning downloaded CSV filename |
 
 ---
 

@@ -60,22 +60,28 @@ The plugin exposes `window.SwaggerActivityBar` with the following methods:
 
 ### Registering a Plugin in the Extensions Guide
 
-Any plugin can add its documentation card to the Extensions Guide dialog:
+Any plugin can add its documentation card to the Extensions Guide dialog using `window.SwaggerActivityBar.registerPluginGuide(...)` or the global alias `window.registerPluginGuide(...)`:
 
 ```javascript
 function registerGuide() {
-    if (window.SwaggerActivityBar && typeof window.SwaggerActivityBar.registerPluginGuide === "function") {
-        window.SwaggerActivityBar.registerPluginGuide({
+    const register = window.registerPluginGuide || (window.SwaggerActivityBar && window.SwaggerActivityBar.registerPluginGuide);
+    if (typeof register === "function") {
+        // Structured / adaptive parameters or standard manual:
+        register({
             id: "my-custom-plugin",
             name: "My Custom Plugin",
             version: "1.0.0",
             description: "Detailed overview of what this plugin provides.",
-            manual: `### Overview
-Detailed plugin manual formatted in Markdown.
-
-- Feature 1: Automatic parameter generation
-- Feature 2: Real-time telemetry
-`,
+            // Supports either Markdown manual or structured sections:
+            features: [
+                "Automatic parameter generation",
+                "Real-time telemetry and metrics",
+                "1-click export to clipboard"
+            ],
+            howToUse: [
+                "Open any endpoint accordion in Swagger UI",
+                "Click the tool icon in the Activity Bar to view telemetry"
+            ],
             shortcuts: [
                 "Esc: Close panel or active modal"
             ],

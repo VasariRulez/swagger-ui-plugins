@@ -1,10 +1,15 @@
 (() => {
     "use strict";
 
+    // Host configuration support
+    const userConfig = window.SwaggerPrettyJsonConfig || {};
+    const INDENT_SPACES = typeof userConfig.indent === "number" ? userConfig.indent : 2;
+    const INITIAL_EXPAND_DEPTH = typeof userConfig.initialExpandDepth === "number" ? userConfig.initialExpandDepth : 2;
+    const LONG_STRING_THRESHOLD = typeof userConfig.truncateStringLength === "number" ? userConfig.truncateStringLength : 250;
+    const TRUNCATE_PREVIEW_LENGTH = Math.min(120, Math.max(30, Math.floor(LONG_STRING_THRESHOLD / 2)));
+
     const ROOT_CLASS = "custom-json-view";
     const STYLE_ID = "custom-json-view-style";
-    const LONG_STRING_THRESHOLD = 250;
-    const TRUNCATE_PREVIEW_LENGTH = 120;
 
     function injectStyles() {
         if (document.getElementById(STYLE_ID)) {
@@ -283,7 +288,7 @@
         opacity: 0.85;
       }
 
-      /* Pulsante copia valore su singola riga */
+      /* Single-line value copy button */
       .${ROOT_CLASS}__copy-btn {
         position: absolute;
         right: 4px;
@@ -313,7 +318,7 @@
         background: var(--json-copy-btn-hover);
       }
 
-      /* Toggle Mostra tutto per stringhe voluminose */
+      /* Show all toggle for long strings */
       .${ROOT_CLASS}__toggle-expand {
         cursor: pointer;
         margin-left: 6px;
@@ -332,7 +337,7 @@
         background: var(--json-hover);
       }
 
-      /* Protezione tabella Swagger UI contro espansione orizzontale */
+      /* Protection for Swagger UI table against horizontal overflow */
       .swagger-ui .responses-table .response-col_description {
         max-width: 0;
         width: 100%;
@@ -428,7 +433,7 @@
 
             const sizeKB = (value.length / 1024).toFixed(1);
             const sizeLabel = parseFloat(sizeKB) > 0 ? `${sizeKB} KB` : `${value.length} car.`;
-            toggleBtn.textContent = `[+ ${sizeLabel} - Mostra tutto]`;
+            toggleBtn.textContent = `[+ ${sizeLabel} - Show all]`;
             toggleBtn.title = "Espandi/Comprimi testo completo";
 
             toggleBtn.addEventListener("click", (e) => {
@@ -437,10 +442,10 @@
                 isExpanded = !isExpanded;
                 if (isExpanded) {
                     textSpan.textContent = escaped;
-                    toggleBtn.textContent = "[Comprimi]";
+                    toggleBtn.textContent = "[Collapse]";
                 } else {
                     textSpan.textContent = truncatedEscaped;
-                    toggleBtn.textContent = `[+ ${sizeLabel} - Mostra tutto]`;
+                    toggleBtn.textContent = `[+ ${sizeLabel} - Show full]`;
                 }
             });
 
@@ -479,23 +484,23 @@
     function getPreview(value) {
         if (Array.isArray(value)) {
             const count = value.length;
-            return `(${count} element${count === 1 ? "o" : "i"})`;
+            return `(${count} item${count === 1 ? "" : "s"})`;
         }
 
         if (value !== null && typeof value === "object") {
             const count = Object.keys(value).length;
-            return `(${count} propriet${count === 1 ? "à" : "à"})`;
+            return `(${count} propert${count === 1 ? "y" : "ies"})`;
         }
 
         return "";
     }
 
-    function createInlineCopyButton(getValueCallback, tooltip = "Copia valore") {
+    function createInlineCopyButton(getValueCallback, tooltip = "Copy value") {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = `${ROOT_CLASS}__copy-btn`;
         btn.title = tooltip;
-        btn.textContent = "Copia";
+        btn.textContent = "Copy";
         btn.setAttribute("aria-label", tooltip);
 
         btn.addEventListener("click", (e) => {
@@ -535,16 +540,16 @@
 
             row.appendChild(formatPrimitive(value));
 
-            // Copia valore primitivo puro (senza doppi apici aggiuntivi)
+            // Copy raw primitive value (without extra quotes)
             const rawValue = typeof value === "string" ? value : String(value);
-            row.appendChild(createInlineCopyButton(() => rawValue, "Copia valore"));
+            row.appendChild(createInlineCopyButton(() => rawValue, "Copy value"));
 
             return row;
         }
 
         const details = document.createElement("details");
         details.className = `${ROOT_CLASS}__node`;
-        details.open = initiallyOpen;
+        details.open = isRoot ? (INITIAL_EXPAND_DEPTH > 0 ? initiallyOpen : false) : initiallyOpen;
 
         const currentPath = isRoot
             ? []
@@ -588,8 +593,8 @@
         // Copia intero sotto-albero serializzato come JSON formattato
         summary.appendChild(
             createInlineCopyButton(
-                () => JSON.stringify(value, null, 2),
-                "Copia sotto-albero JSON"
+                () => JSON.stringify(value, null, INDENT_SPACES),
+                "Copy subtree JSON"
             )
         );
 
@@ -606,11 +611,13 @@
             : Object.entries(value);
 
         for (const [childName, childValue] of entries) {
+            const childDepth = currentPath.length + 1;
+            const childInitiallyOpen = childDepth < INITIAL_EXPAND_DEPTH;
             children.appendChild(
                 renderNode(
                     childValue,
                     childName,
-                    false,
+                    childInitiallyOpen,
                     false,
                     currentPath
                 )
@@ -649,7 +656,7 @@
         let source = text.replace(/^\uFEFF/, "").trim();
         if (!source) return null;
 
-        // Se non inizia con { o [, cerca l'inizio del blocco JSON (ignora eventuale testo/header iniziale)
+        // If string does not start with { or [, locate start of JSON block
         if (!source.startsWith("{") && !source.startsWith("[")) {
             const firstBrace = source.indexOf("{");
             const firstBracket = source.indexOf("[");
@@ -713,7 +720,7 @@
         return null;
     }
 
-    function copyText(text, button, successLabel = "Copiato!") {
+    function copyText(text, button, successLabel = "Copied!") {
         if (text === undefined || text === null) {
             return;
         }
@@ -756,10 +763,10 @@
 
                 const successful = document.execCommand("copy");
                 document.body.removeChild(textarea);
-                setFeedback(successful ? successLabel : "Errore");
+                setFeedback(successful ? successLabel : "Error");
             } catch (err) {
-                console.error("Copia negli appunti non riuscita:", err);
-                setFeedback("Errore");
+                console.error("Clipboard copy failed:", err);
+                setFeedback("Error");
             }
         };
 
@@ -860,10 +867,10 @@
     }
 
     function findSwaggerCodeElement(container) {
-        // Cerca prima tra i contenitori dedicati al codice (model-example, highlight-code, pre)
+        // Search first within code containers (model-example, highlight-code, pre)
         const elements = container.querySelectorAll(".model-example pre, .highlight-code pre, pre.microlight, pre.example, pre, code");
 
-        // Primo passaggio: trova il primo elemento il cui contenuto sia effettivamente un JSON valido
+        // First pass: find first element whose content is valid JSON
         for (const el of elements) {
             if (el.closest(`.${ROOT_CLASS}`)) {
                 continue;
@@ -890,7 +897,7 @@
             return;
         }
 
-        const json = JSON.stringify(parsed, null, 2);
+        const json = JSON.stringify(parsed, null, INDENT_SPACES);
 
         const customBody = viewer.querySelector(
             `.${ROOT_CLASS}__body`
@@ -909,8 +916,8 @@
         }
 
         /*
-         * Memorizza gli oggetti aperti.
-         * La chiave viene costruita usando il percorso JSON.
+         * Record open nodes.
+         * Key is constructed using the JSON path.
          */
         const openPaths = new Set();
 
@@ -924,8 +931,7 @@
             });
 
         /*
-         * Ricostruisce l'albero mantenendo aperti
-         * gli stessi percorsi.
+         * Reconstruct tree keeping the same paths expanded.
          */
         const newTree = renderNode(
             parsed,
@@ -953,7 +959,7 @@
         oldTree.replaceWith(newTree);
 
         /*
-         * Aggiorna la copia della vista originale.
+         * Update copy of the original view.
          */
         const originalContainer = codeElement.closest(".highlight-code") || codeElement.parentElement || codeElement;
 
@@ -1010,7 +1016,7 @@
             return;
         }
 
-        const json = JSON.stringify(parsed, null, 2);
+        const json = JSON.stringify(parsed, null, INDENT_SPACES);
         const originalContainer = codeElement.closest(".highlight-code") || codeElement.parentElement || codeElement;
         if (!originalContainer || !originalContainer.parentElement) {
             return;
@@ -1038,28 +1044,28 @@
         const expandButton = document.createElement("button");
         expandButton.type = "button";
         expandButton.className = `${ROOT_CLASS}__button`;
-        expandButton.textContent = "Espandi tutto";
+        expandButton.textContent = "Expand all";
 
         const collapseButton = document.createElement("button");
         collapseButton.type = "button";
         collapseButton.className = `${ROOT_CLASS}__button`;
-        collapseButton.textContent = "Comprimi tutto";
+        collapseButton.textContent = "Collapse all";
 
         const copyButton = document.createElement("button");
         copyButton.type = "button";
         copyButton.className = `${ROOT_CLASS}__button`;
-        copyButton.textContent = "Copia";
+        copyButton.textContent = "Copy";
 
         const downloadButton = document.createElement("button");
         downloadButton.type = "button";
         downloadButton.className = `${ROOT_CLASS}__button`;
-        downloadButton.textContent = "Scarica";
-        downloadButton.title = "Scarica payload JSON (.json)";
+        downloadButton.textContent = "Download";
+        downloadButton.title = "Download JSON payload (.json)";
 
         const originalButton = document.createElement("button");
         originalButton.type = "button";
         originalButton.className = `${ROOT_CLASS}__button`;
-        originalButton.textContent = "Originale";
+        originalButton.textContent = "Raw";
         originalButton.setAttribute(
             "aria-pressed",
             "false"
@@ -1106,7 +1112,7 @@
             copyButton.hidden = false;
             downloadButton.hidden = false;
 
-            originalButton.textContent = "Originale";
+            originalButton.textContent = "Raw";
             originalButton.setAttribute(
                 "aria-pressed",
                 "false"
@@ -1343,7 +1349,7 @@
     let isGuideRegistered = false;
 
     /**
-     * Pubblica i metadati e la documentazione del plugin nella guida interattiva dell'Activity Bar (ID 27).
+     * Publishes plugin metadata and documentation to the interactive Activity Bar guide.
      */
     function registerGuideDocumentation() {
         if (isGuideRegistered) return;
@@ -1353,13 +1359,13 @@
                 id: "pretty-json-view",
                 name: "Pretty JSON & Tree View",
                 version: "1.0.0",
-                description: "Visualizzatore interattivo ad albero per payload JSON con colorazione per verbo HTTP, collasso nodi e pulsanti di copia e download.",
+                description: "Interactive collapsible tree viewer for JSON payloads with HTTP method color-coding, copy, download, and raw toggle.",
                 shortcuts: [
-                    "Espandi tutto: Apre tutti i nodi e gli oggetti annidati",
-                    "Comprimi tutto: Chiude tutti i sotto-nodi",
-                    "Copia: Copia negli appunti il JSON formattato",
-                    "Scarica: Scarica il payload come file .json",
-                    "Originale: Commuta tra vista interattiva e testo grezzo Swagger"
+                    "Expand all: Open all nested nodes and objects",
+                    "Collapse all: Close all child nodes",
+                    "Copy: Copy formatted JSON to clipboard",
+                    "Download: Save payload as .json file",
+                    "Raw: Toggle between interactive tree and raw Swagger text"
                 ],
                 iconHtml: `
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1368,16 +1374,16 @@
                     </svg>
                 `,
                 manual: `
-### Panoramica
-Migliora la consultazione dei payload JSON sia nelle risposte del server che negli esempi di documentazione di Swagger UI.
+### Overview
+Enhances readability of JSON payloads in server responses and Swagger UI documentation examples.
 
-### Funzionalità
-- **Albero Interattivo**: naviga ed espandi singoli nodi e array annidati.
-- **Colorazione per Metodo HTTP**: la toolbar assume la colorazione distintiva del verbo (\`GET\` blu, \`POST\` verde, \`PUT\` arancio, \`DELETE\` rosso).
-- **Toolbar di Azione**:
-  - **Espandi / Comprimi tutto**: gestione immediata di risposte complesse.
-  - **Copia & Scarica**: esportazione immediata negli appunti o su file \`.json\`.
-  - **Originale**: toggle rapido per visualizzare il testo grezzo originale.
+### Features
+- **Interactive Tree**: navigate and expand nested objects, arrays, and primitive values.
+- **HTTP Method Color Theme**: the viewer toolbar matches HTTP method colors (\`GET\` blue, \`POST\` green, \`PUT\` orange, \`DELETE\` red).
+- **Toolbar Actions**:
+  - **Expand / Collapse all**: instant control over large response trees.
+  - **Copy & Download**: 1-click clipboard copy or download as \`.json\`.
+  - **Raw Toggle**: switch back and forth to Swagger's original raw text representation.
 `
             });
         }

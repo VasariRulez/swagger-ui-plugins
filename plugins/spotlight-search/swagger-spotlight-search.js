@@ -1,82 +1,91 @@
 /**
  * @file swagger-spotlight-search.js
- * @summary Plugin Command Palette / Spotlight Search per Swagger UI (OpenAPI / REST).
- *          Consente di cercare istantaneamente qualsiasi endpoint dell'API premendo
- *          Ctrl+K (o Cmd+K su Mac) oppure '/' e navigare tramite tastiera.
+ * @summary Command Palette / Spotlight Search plugin for Swagger UI (OpenAPI / REST).
+ *          Allows instant lookup of any API endpoint using Ctrl+K (or Cmd+K on Mac)
+ *          or '/', with full keyboard navigation and smooth scrolling.
  *
- * --- FLUSSO ARCHITETTURALE ---
- * 1. Attende il caricamento di Swagger UI e indicizza tutti gli endpoint registrati
- *    nella specifica OpenAPI (rotte, verbi HTTP, tag/controller, riassunti).
- * 2. Inietta un pulsante di ricerca discreto nella testata di Swagger (.topbar-wrapper).
- * 3. Registra gli shortcut da tastiera globali:
- *    - 'Ctrl + K' o 'Cmd + K' (sempre attivi)
- *    - '/' (attivo quando non si sta digitando in campi di testo)
- * 4. All'apertura della finestra Spotlight modale:
- *    - Mostra un input di ricerca con focus automatico.
- *    - Esegue una ricerca rapida multi-token (es. "post cand", "chat", "dev").
- *    - Permette di scorrere i risultati con Freccia Giù / Freccia Su.
- * 5. Alla pressione di 'Invio' o al click su un risultato:
- *    - Chiude la finestra di ricerca.
- *    - Espande il gruppo/controller se collassato.
- *    - Espande l'endpoint (.opblock) se chiuso.
- *    - Esegue uno scroll animato centrando l'endpoint nello schermo.
- *    - Attiva un effetto visivo temporaneo (highlight glow) per evidenziare la destinazione.
- * 6. Supporto Temi (Light / Dark Mode):
- *    - Allineato al 100% con 'swagger-pretty-json-view.js' e 'swagger-jwt-inspector.js'.
- *    - Si adatta in tempo reale alla presenza della classe 'dark-mode' su <html> o <body>.
+ * --- ARCHITECTURAL FLOW ---
+ * 1. Waits for Swagger UI to load and indexes all registered endpoints from OpenAPI spec
+ *    (routes, HTTP verbs, tags/controllers, operation summaries).
+ * 2. Injects a search bar next to the Authorize button (or fallback container).
+ * 3. Registers global keyboard shortcuts:
+ *    - 'Ctrl + K' or 'Cmd + K' (always active)
+ *    - '/' (active when not typing inside input fields)
+ * 4. On opening the Spotlight modal window:
+ *    - Shows an auto-focused search input.
+ *    - Performs fast multi-token search (e.g., "post user", "chat", "dev").
+ *    - Allows cycling results with Up / Down arrows.
+ * 5. On 'Enter' or clicking a search result:
+ *    - Closes search modal.
+ *    - Expands parent controller/tag group if collapsed.
+ *    - Expands endpoint (.opblock) if closed.
+ *    - Smoothly scrolls and centers endpoint on screen.
+ *    - Triggers temporary animated glow ring.
+ * 6. Theme Support (Light / Dark Mode):
+ *    - Coordinated with other plugins.
+ *    - Reacts in real time to 'dark-mode' class on <html> or <body>.
  *
- * --- GUIDA ALLA MANUTENZIONE PER SVILUPPATORI ---
- * - Per modificare i tasti di scelta rapida: Aggiornare `CONFIG.SHORTCUTS`.
- * - Per modificare il limite dei risultati mostrati: Modificare `CONFIG.MAX_RESULTS`.
- * - Per cambiare la durata o il colore dell'evidenziazione dopo il salto: Modificare `CONFIG.HIGHLIGHT_DURATION_MS`.
- * - Per modificare gli stili dei verbi HTTP o dei temi: Modificare le variabili CSS in `injectStyles()`.
+ * --- CONFIGURATION ---
+ * Supports optional `window.SwaggerSpotlightConfig`:
+ * {
+ *   primaryKey: "k",
+ *   enableSlashShortcut: true,
+ *   maxResults: 30,
+ *   highlightDurationMs: 2500,
+ *   backToTopEnabled: true,
+ *   backToTopThresholdPx: 280
+ * }
  */
 (() => {
     "use strict";
 
     // =========================================================================
-    // 1. CONFIGURAZIONE GENERALE (Modificabile dallo sviluppatore)
+    // 1. GENERAL CONFIGURATION (Reads window.SwaggerSpotlightConfig)
     // =========================================================================
+    const userConfig = window.SwaggerSpotlightConfig || {};
+
     const CONFIG = {
-        /** Tasti di scelta rapida abilitati */
+        /** Enabled shortcut keys */
         SHORTCUTS: {
-            PRIMARY_KEY: "k", // Usato con Ctrl o Meta/Cmd
-            SLASH_TRIGGER: true // Abilita '/' quando non si digita in input
+            PRIMARY_KEY: typeof userConfig.primaryKey === "string" ? userConfig.primaryKey.toLowerCase() : "k",
+            SLASH_TRIGGER: typeof userConfig.enableSlashShortcut === "boolean"
+                ? userConfig.enableSlashShortcut
+                : (typeof userConfig.slashTrigger === "boolean" ? userConfig.slashTrigger : true)
         },
 
-        /** Numero massimo di risultati restituiti dalla ricerca */
-        MAX_RESULTS: 30,
+        /** Maximum number of results returned by search */
+        MAX_RESULTS: typeof userConfig.maxResults === "number" ? userConfig.maxResults : 30,
 
-        /** Durata dell'effetto evidenziazione luminosa (glow) all'arrivo sull'endpoint (ms) */
-        HIGHLIGHT_DURATION_MS: 2500,
+        /** Duration of highlight glow animation upon reaching target endpoint (ms) */
+        HIGHLIGHT_DURATION_MS: typeof userConfig.highlightDurationMs === "number" ? userConfig.highlightDurationMs : 2500,
 
-        /** Intervallo di polling per attendere il caricamento di Swagger UI */
+        /** Polling interval for detecting Swagger UI readiness */
         UI_DISCOVERY_INTERVAL_MS: 200,
 
-        /** Timeout massimo di attesa caricamento di window.ui */
+        /** Discovery timeout */
         UI_DISCOVERY_TIMEOUT_MS: 30000,
 
-        /** ID elemento DOM del modale Spotlight */
+        /** DOM ID of Spotlight modal */
         MODAL_ELEMENT_ID: "swagger-spotlight-modal",
 
-        /** ID elemento del pulsante trigger nella navbar */
+        /** Trigger button DOM ID */
         TRIGGER_BTN_ID: "swagger-spotlight-trigger-btn",
 
-        /** ID elemento container di fallback quando .scheme-container (Authorize) non esiste */
+        /** Fallback container DOM ID when .scheme-container does not exist */
         FALLBACK_CONTAINER_ID: "swagger-spotlight-fallback-container",
 
-        /** ID elemento stile CSS iniettato */
+        /** Injected stylesheet element ID */
         STYLE_ELEMENT_ID: "swagger-spotlight-styles",
 
-        /** Configurazione pulsante floating "Torna in Cima" */
+        /** Back to Top floating button configuration */
         BACK_TO_TOP: {
-            ENABLED: true,
-            SCROLL_THRESHOLD_PX: 280,
+            ENABLED: typeof userConfig.backToTopEnabled === "boolean" ? userConfig.backToTopEnabled : true,
+            SCROLL_THRESHOLD_PX: typeof userConfig.backToTopThresholdPx === "number" ? userConfig.backToTopThresholdPx : 280,
             BUTTON_ID: "swagger-back-to-top-btn"
         }
     };
 
-    /** Mappa colori standard di Swagger per ciascun metodo HTTP */
+    /** Standard Swagger color mapping for each HTTP method */
     const METHOD_COLORS = {
         get: { bg: "#61affe", text: "#ffffff" },
         post: { bg: "#49cc90", text: "#ffffff" },
@@ -89,7 +98,7 @@
     };
 
     // =========================================================================
-    // 2. STATO RUNTIME IN-MEMORY
+    // 2. RUNTIME IN-MEMORY STATE
     // =========================================================================
     let indexedEndpoints = [];
     let isIndexLoaded = false;
@@ -97,23 +106,23 @@
     let currentSearchResults = [];
 
     // =========================================================================
-    // 3. INDICIZZAZIONE ENDPOINT (Da Spec OpenAPI e DOM)
+    // 3. ENDPOINT INDEXING (From OpenAPI Spec & DOM)
     // =========================================================================
 
     /**
-     * Struttura di un endpoint indicizzato:
+     * Indexed endpoint data structure:
      * @typedef {object} IndexedEndpoint
-     * @property {string} method - Verbo HTTP minuscolo (get, post, ecc.)
-     * @property {string} path - Percorso rotta (es. /api/Candidate/{id})
-     * @property {string} tag - Controller o tag di appartenenza
-     * @property {string} summary - Riassunto o descrizione dell'operazione
-     * @property {string} operationId - ID operazione OpenAPI se presente
-     * @property {string} searchText - Stringa normalizzata per la ricerca multi-token
-     * @property {string} domId - Identificativo ID del blocco opblock nel DOM
+     * @property {string} method - Lowercase HTTP verb (get, post, etc.)
+     * @property {string} path - Route path (e.g. /api/users/{id})
+     * @property {string} tag - Controller or category tag
+     * @property {string} summary - Operation summary or description
+     * @property {string} operationId - OpenAPI operation ID if present
+     * @property {string} searchText - Normalized string for multi-token searching
+     * @property {string} domId - Expected DOM element ID for the opblock
      */
 
     /**
-     * Estrae la specifica OpenAPI dallo store Redux di Swagger o dai metadati globali.
+     * Extracts OpenAPI specification from Swagger Redux store or selectors.
      * @returns {object|null}
      */
     function getSwaggerSpec() {
@@ -121,7 +130,7 @@
             const ui = window.ui;
             if (!ui) return null;
 
-            // Tentativo 1: Tramite getter dello store Redux
+            // Attempt 1: Via Redux store getter
             const state = ui.getState && ui.getState();
             if (state) {
                 const specData = state.get("spec")?.get("json");
@@ -130,7 +139,7 @@
                 }
             }
 
-            // Tentativo 2: Tramite selectors
+            // Attempt 2: Via selectors
             if (ui.specSelectors && typeof ui.specSelectors.specJson === "function") {
                 const spec = ui.specSelectors.specJson();
                 if (spec) {
@@ -138,20 +147,20 @@
                 }
             }
         } catch (error) {
-            console.warn("[Swagger Spotlight] Impossibile leggere specifica da Redux:", error);
+            console.warn("[Swagger Spotlight] Unable to read specification from Redux:", error);
         }
         return null;
     }
 
     /**
-     * Indicizza tutti gli endpoint OpenAPI disponibili, integrando sia la specifica che il DOM.
+     * Indexes all available OpenAPI endpoints from specification and fallback DOM.
      */
     function buildEndpointsIndex() {
         const spec = getSwaggerSpec();
         const results = [];
 
         if (spec && spec.paths) {
-            // Indicizzazione dalla specifica OpenAPI
+            // Indexing from OpenAPI specification
             Object.entries(spec.paths).forEach(([pathName, pathItem]) => {
                 const methods = ["get", "post", "put", "delete", "patch", "head", "options", "trace"];
 
@@ -163,7 +172,7 @@
                     const summary = op.summary || op.description || "";
                     const operationId = op.operationId || "";
 
-                    // Calcolo domId standard utilizzato da Swagger UI: operations-{tag}-{operationId o sanitize(path)}
+                    // Standard DOM ID used by Swagger UI: operations-{tag}-{operationId or sanitize(path)}
                     const sanitizedTag = tag.replace(/\s+/g, "_");
                     const opIdentifier = operationId || `${method}_${pathName.replace(/[^a-zA-Z0-9]/g, "_")}`;
                     const expectedDomId = `operations-${sanitizedTag}-${opIdentifier}`;
@@ -183,7 +192,7 @@
             });
         }
 
-        // Se la specifica non era accessibile, esegue scansione di riserva direttamente dal DOM
+        // Fallback: scan DOM directly if OpenAPI specification is inaccessible
         if (results.length === 0) {
             document.querySelectorAll(".swagger-ui .opblock").forEach((el) => {
                 const methodEl = el.querySelector(".opblock-summary-method");
@@ -212,15 +221,15 @@
 
         indexedEndpoints = results;
         isIndexLoaded = results.length > 0;
-        console.info(`[Swagger Spotlight] Indicizzati ${indexedEndpoints.length} endpoint con successo.`);
+        console.info(`[Swagger Spotlight] Successfully indexed ${indexedEndpoints.length} endpoints.`);
     }
 
     // =========================================================================
-    // 4. RICERCA E FILTRO ENDPOINT (Multi-Token Fuzzy Search)
+    // 4. ENDPOINT SEARCH & FILTERING (Multi-Token Fuzzy Search)
     // =========================================================================
 
     /**
-     * Esegue una ricerca rapida multi-token tra tutti gli endpoint indicizzati.
+     * Performs fast multi-token search across all indexed endpoints.
      * @param {string} rawQuery
      * @returns {IndexedEndpoint[]}
      */
@@ -231,7 +240,7 @@
 
         const query = (rawQuery || "").trim().toLowerCase();
         if (!query) {
-            // Se la query è vuota, restituisce i primi N endpoint per esplorazione
+            // If query is empty, return first N endpoints for exploration
             return indexedEndpoints.slice(0, CONFIG.MAX_RESULTS);
         }
 
@@ -239,39 +248,38 @@
 
         const matched = [];
         for (const item of indexedEndpoints) {
-            // Tutti i token digitati dall'utente devono corrispondere
+            // All tokens entered by user must match
             const allMatched = tokens.every((token) => item.searchText.includes(token));
             if (allMatched) {
-                // Calcolo score di rilevanza per ordinare i risultati
+                // Calculate relevance score to rank results
                 let score = 0;
 
-                // Match esatto o iniziale sul path
+                // Exact or prefix match on route path
                 if (item.path.toLowerCase().startsWith(query)) score += 100;
                 else if (item.path.toLowerCase().includes(query)) score += 50;
 
-                // Match esatto sul metodo HTTP
+                // Exact match on HTTP verb
                 if (tokens.includes(item.method)) score += 40;
 
-                // Match sul tag/controller
+                // Match on controller tag
                 if (item.tag.toLowerCase().includes(query)) score += 30;
 
                 matched.push({ item, score });
             }
         }
 
-        // Ordina per score decrescente
+        // Sort by descending score
         matched.sort((a, b) => b.score - a.score);
 
         return matched.slice(0, CONFIG.MAX_RESULTS).map((m) => m.item);
     }
 
     // =========================================================================
-    // 5. GESTIONE TEMI (LIGHT / DARK THEME) ED INIEZIONE STILI CSS
+    // 5. THEME MANAGEMENT (LIGHT / DARK THEME) & CSS INJECTION
     // =========================================================================
 
     /**
-     * Rileva se la pagina Swagger UI è in modalità scura controllando la presenza della classe 'dark-mode'
-     * su <html> o <body>, coerentemente con tutti gli altri plugin.
+     * Detects if dark mode is active by checking 'dark-mode' class on <html> or <body>.
      * @returns {boolean}
      */
     function isDarkModeActive() {
@@ -282,7 +290,7 @@
     }
 
     /**
-     * Sincronizza la classe tema '--dark' sul modale se attualmente aperto.
+     * Synchronizes theme class on Spotlight modal if open.
      */
     function applyTheme() {
         const dark = isDarkModeActive();
@@ -293,7 +301,7 @@
     }
 
     /**
-     * Ascolta le mutazioni della classe su <html> e <body> per aggiornare istantaneamente il tema.
+     * Observes class mutations on <html> and <body> to update theme in real time.
      */
     function observeThemeChanges() {
         const observer = new MutationObserver((mutations) => {
@@ -333,7 +341,7 @@
                SWAGGER SPOTLIGHT SEARCH - STILI GRAFICI ADATTIVI
                ========================================================================= */
 
-            /* --- Layout container della sezione schemes (.scheme-container) --- */
+            /* --- Scheme container layout (.scheme-container) --- */
             .swagger-ui .scheme-container {
                 padding: 15px 0 !important;
             }
@@ -346,7 +354,7 @@
                 gap: 16px !important;
             }
 
-            /* --- Fallback container quando Authorize non è presente --- */
+            /* --- Fallback container when Authorize is not present --- */
             #${CONFIG.FALLBACK_CONTAINER_ID} {
                 margin: 20px 0 !important;
                 padding: 15px 0 !important;
@@ -356,7 +364,7 @@
                 justify-content: flex-start !important;
             }
 
-            /* --- Barra di Ricerca Orizzontale a sinistra di Authorize --- */
+            /* --- Horizontal Search Bar to the left of Authorize --- */
             #${CONFIG.TRIGGER_BTN_ID} {
                 display: inline-flex;
                 align-items: center;
@@ -410,7 +418,7 @@
                 line-height: 1.2;
             }
 
-            /* --- Stile Barra di Ricerca in Tema Scuro --- */
+            /* --- Search Bar style in Dark Mode --- */
             html.dark-mode #${CONFIG.TRIGGER_BTN_ID},
             body.dark-mode #${CONFIG.TRIGGER_BTN_ID} {
                 background: #1e1e1e;
@@ -437,7 +445,7 @@
                 color: #cbd5e1;
             }
 
-            /* --- Overlay Modale Spotlight (Default: Tema Chiaro ad Alto Contrasto) --- */
+            /* --- Spotlight Modal Overlay (Default: High-contrast light theme) --- */
             .spotlight-modal-overlay {
                 --spot-overlay-bg: rgba(0, 0, 0, 0.55);
                 --spot-bg-card: #ffffff;
@@ -473,7 +481,7 @@
                 animation: spotFadeIn 0.15s ease-out;
             }
 
-            /* --- Modale Spotlight Tema Scuro --- */
+            /* --- Spotlight Modal Dark Theme --- */
             html.dark-mode .spotlight-modal-overlay,
             body.dark-mode .spotlight-modal-overlay,
             .spotlight-modal--dark {
@@ -517,7 +525,7 @@
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             }
 
-            /* --- Header con Input di Ricerca --- */
+            /* --- Header with Search Input --- */
             .spotlight-header {
                 display: flex;
                 align-items: center;
@@ -558,7 +566,7 @@
                 cursor: pointer;
             }
 
-            /* --- Lista Risultati --- */
+            /* --- Results List --- */
             .spotlight-results-list {
                 list-style: none;
                 margin: 0;
@@ -589,7 +597,7 @@
                 background: var(--spot-bg-item-selected) !important;
             }
 
-            /* --- Badge Metodo HTTP --- */
+            /* --- HTTP Method Badge --- */
             .spotlight-method-badge {
                 font-size: 11px;
                 font-weight: 700;
@@ -643,7 +651,7 @@
                 font-size: 14px;
             }
 
-            /* --- Footer con Guida Tasti --- */
+            /* --- Footer with Keyboard Shortcuts --- */
             .spotlight-footer {
                 display: flex;
                 align-items: center;
@@ -668,7 +676,7 @@
                 font-family: inherit;
             }
 
-            /* --- Animazione Flash Glow all'arrivo sull'endpoint --- */
+            /* --- Flash Glow animation upon arriving at endpoint --- */
             @keyframes swaggerSpotlightTargetGlow {
                 0% { box-shadow: 0 0 0 4px #38bdf8, 0 0 20px rgba(56, 189, 248, 0.6); }
                 50% { box-shadow: 0 0 0 6px #38bdf8, 0 0 30px rgba(56, 189, 248, 0.8); }
@@ -681,7 +689,7 @@
                 transition: all 0.3s ease;
             }
 
-            /* --- Pulsante Floating Torna in Cima (Back to Top) --- */
+            /* --- Floating Back to Top button --- */
             #${CONFIG.BACK_TO_TOP.BUTTON_ID} {
                 position: fixed;
                 bottom: 24px;
@@ -723,7 +731,7 @@
                 transform: translateY(0);
             }
 
-            /* In Tema Scuro il bottone ha sfondo scuro coordinato con verde Swagger */
+            /* In Dark Theme, back to top button coordinates with Swagger green */
             html.dark-mode #${CONFIG.BACK_TO_TOP.BUTTON_ID},
             body.dark-mode #${CONFIG.BACK_TO_TOP.BUTTON_ID},
             .spotlight-modal--dark #${CONFIG.BACK_TO_TOP.BUTTON_ID} {
@@ -744,12 +752,11 @@
     }
 
     // =========================================================================
-    // 6. NAVIGAZIONE VERSO L'ENDPOINT TARGET (Scroll, Espansione, Centratura)
+    // 6. TARGET ENDPOINT NAVIGATION (Scroll, Expansion, Centering)
     // =========================================================================
 
     /**
-     * Pulisce una stringa rimuovendo eventuali caratteri zero-width space (\u200B) che
-     * Swagger UI inietta internamente nei tag e nei percorsi per gestire i word-break.
+     * Cleans zero-width space characters (\u200B) injected internally by Swagger UI.
      * @param {string} str
      * @returns {string}
      */
@@ -759,7 +766,7 @@
     }
 
     /**
-     * Trova l'elemento DOM del controller/tag genitore in Swagger UI.
+     * Finds parent controller/tag DOM element in Swagger UI.
      * @param {string} tag
      * @returns {HTMLElement|null}
      */
@@ -767,7 +774,7 @@
         if (!tag) return null;
         const normalizedTargetTag = cleanZeroWidth(tag).toLowerCase();
 
-        // 1. Ricerca per ID convenzionale assegnato da Swagger UI
+        // 1. Search by conventional ID assigned by Swagger UI
         const sanitizedId = tag.replace(/\s+/g, "_");
         const byId = document.getElementById(`operations-tag-${tag}`)
                   || document.getElementById(`operations-tag-${sanitizedId}`);
@@ -775,17 +782,17 @@
             return byId.closest(".opblock-tag-section") || byId;
         }
 
-        // 2. Ricerca per attributo data-tag
+        // 2. Search by data-tag attribute
         try {
             const byData = document.querySelector(`.swagger-ui [data-tag="${CSS.escape(tag)}"]`);
             if (byData) {
                 return byData.closest(".opblock-tag-section") || byData;
             }
         } catch {
-            // Ignora eccezioni su caratteri speciali in CSS.escape
+            // Ignore CSS.escape syntax exceptions
         }
 
-        // 3. Scansione esaustiva di tutte le sezioni tag nel DOM
+        // 3. Exhaustive search across all tag sections in DOM
         const sections = document.querySelectorAll(".swagger-ui .opblock-tag-section");
         for (const sec of sections) {
             const tagHeader = sec.querySelector(".opblock-tag");
@@ -801,14 +808,14 @@
     }
 
     /**
-     * Assicura che la sezione del controller/tag sia aperta.
+     * Ensures the controller/tag section is open.
      * @param {HTMLElement} tagSection
-     * @returns {boolean} True se ha cliccato per aprirla, False se era già aperta
+     * @returns {boolean} True if clicked to open, False if already open
      */
     function ensureTagSectionOpen(tagSection) {
         if (!tagSection) return false;
 
-        // Se la sezione non ha la classe 'is-open', è collassata
+        // If section does not have 'is-open' class, it is collapsed
         if (!tagSection.classList.contains("is-open")) {
             const toggleElement = tagSection.querySelector(".opblock-tag")
                                || tagSection.querySelector(".opblock-tag button")
@@ -822,7 +829,7 @@
     }
 
     /**
-     * Localizza l'elemento .opblock dell'endpoint nel DOM tramite ID o scansione metodo + path.
+     * Locates the endpoint .opblock element in DOM via ID or method + path scan.
      * @param {IndexedEndpoint} endpoint
      * @returns {HTMLElement|null}
      */
@@ -851,8 +858,7 @@
     }
 
     /**
-     * Assicura che l'endpoint (.opblock) sia espanso.
-     * Clicca specificamente il pulsante .opblock-summary-control che gestisce l'evento di Swagger UI.
+     * Ensures endpoint (.opblock) is expanded by clicking .opblock-summary-control.
      * @param {HTMLElement} opblock
      */
     function ensureOpblockOpen(opblock) {
@@ -869,38 +875,35 @@
     }
 
     /**
-     * Localizza l'elemento dell'endpoint nel DOM, ne garantisce l'apertura
-     * (inclusa quella del controller genitore) e naviga fino alla testa dell'endpoint.
+     * Locates endpoint in DOM, ensures parent controller and endpoint are expanded, and scrolls to header.
      * @param {IndexedEndpoint} endpoint
      */
     function navigateToEndpoint(endpoint) {
         closeSpotlightModal();
 
-        // 1. Risolve il controller genitore e lo apre subito se era chiuso
+        // 1. Resolve parent controller and unfold immediately if closed
         const tagSection = findTagSection(endpoint.tag);
         const didOpenTag = tagSection ? ensureTagSectionOpen(tagSection) : false;
 
         /**
-         * Esegue la centratura visiva sulla TESTA dell'endpoint (.opblock-summary),
-         * ne garantisce l'espansione e applica l'anello luminoso (Glow).
+         * Smoothly scrolls and centers the endpoint summary bar, applying glow effect.
          */
         const executeJump = () => {
             const targetElement = findOpblockElement(endpoint);
             if (!targetElement) {
-                console.warn(`[Swagger Spotlight] Endpoint non trovato nel DOM: ${endpoint.method} ${endpoint.path}`);
+                console.warn(`[Swagger Spotlight] Endpoint not found in DOM: ${endpoint.method} ${endpoint.path}`);
                 return;
             }
 
-            // 2. Espande l'endpoint se chiuso
+            // 2. Expand endpoint if collapsed
             ensureOpblockOpen(targetElement);
 
-            // 3. Centra la TESTA dell'endpoint (la barra con metodo e rotta) a video
-            // Usiamo un breve ritardo per consentire al DOM di recepire l'espansione
+            // 3. Center endpoint header in viewport (short delay for DOM reflow)
             setTimeout(() => {
                 const headerElement = targetElement.querySelector(".opblock-summary") || targetElement;
                 headerElement.scrollIntoView({ behavior: "smooth", block: "center" });
 
-                // 4. Effetto visivo Glow per focalizzare l'attenzione
+                // 4. Visual Glow highlight animation
                 targetElement.classList.add("swagger-spotlight-highlight");
                 setTimeout(() => {
                     targetElement.classList.remove("swagger-spotlight-highlight");
@@ -908,8 +911,7 @@
             }, 80);
         };
 
-        // Se abbiamo dovuto aprire il controller genitore, Swagger UI (React) monta gli opblock
-        // in modo asincrono; facciamo un polling breve fino a che l'elemento appare
+        // If parent controller was opened, Swagger UI mounts opblocks asynchronously; poll briefly
         if (didOpenTag) {
             let attempts = 0;
             const maxAttempts = 25; // 25 * 30ms = 750ms max
@@ -927,14 +929,14 @@
     }
 
     // =========================================================================
-    // 7. RENDERING E GESTIONE MODALE SPOTLIGHT
+    // 7. SPOTLIGHT MODAL RENDERING & LIFECYCLE
     // =========================================================================
 
     /**
-     * Apre la finestra Spotlight o ne acquisisce il focus se già aperta.
+     * Opens the Spotlight modal window or focuses search input if already open.
      */
     function openSpotlightModal() {
-        // Se già aperto, posiziona solo il cursore nell'input
+        // If already open, focus input
         const existingInput = document.querySelector(`#${CONFIG.MODAL_ELEMENT_ID} .spotlight-input`);
         if (existingInput) {
             existingInput.focus();
@@ -961,19 +963,19 @@
         card.innerHTML = `
             <div class="spotlight-header">
                 <span class="spotlight-icon">🔍</span>
-                <input type="text" class="spotlight-input" placeholder="Cerca endpoint per percorso, metodo, controller o descrizione... (es. /candidates, post, chat, dev)" autocomplete="off" spellcheck="false" />
-                <span class="spotlight-esc-pill" id="spotlight-btn-esc" title="Chiudi">ESC</span>
+                <input type="text" class="spotlight-input" placeholder="Search endpoints by path, method, tag or summary... (e.g. /users, post, chat, dev)" autocomplete="off" spellcheck="false" />
+                <span class="spotlight-esc-pill" id="spotlight-btn-esc" title="Close">ESC</span>
             </div>
 
             <ul class="spotlight-results-list" id="spotlight-results-container"></ul>
 
             <div class="spotlight-footer">
                 <div class="spotlight-hints">
-                    <span class="spotlight-hint-item"><kbd>↑</kbd> <kbd>↓</kbd> Naviga</span>
-                    <span class="spotlight-hint-item"><kbd>↵</kbd> Seleziona & Vai</span>
-                    <span class="spotlight-hint-item"><kbd>ESC</kbd> Chiudi</span>
+                    <span class="spotlight-hint-item"><kbd>↑</kbd> <kbd>↓</kbd> Navigate</span>
+                    <span class="spotlight-hint-item"><kbd>↵</kbd> Select & Go</span>
+                    <span class="spotlight-hint-item"><kbd>ESC</kbd> Close</span>
                 </div>
-                <div id="spotlight-count-badge">0 endpoint</div>
+                <div id="spotlight-count-badge">0 endpoints</div>
             </div>
         `;
 
@@ -987,17 +989,17 @@
 
         escBtn.addEventListener("click", closeSpotlightModal);
 
-        // Funzione per aggiornare a video i risultati cercati
+        // Update rendered search results
         const renderResults = () => {
             currentSearchResults = searchEndpoints(input.value);
             selectedResultIndex = 0;
 
-            countBadge.textContent = `${currentSearchResults.length} endpoint`;
+            countBadge.textContent = `${currentSearchResults.length} ${currentSearchResults.length === 1 ? 'endpoint' : 'endpoints'}`;
 
             if (currentSearchResults.length === 0) {
                 resultsContainer.innerHTML = `
                     <div class="spotlight-empty-state">
-                        Nessun endpoint trovato per "<strong>${escapeHtml(input.value)}</strong>".
+                        No endpoints found for "<strong>${escapeHtml(input.value)}</strong>".
                     </div>
                 `;
                 return;
@@ -1038,7 +1040,7 @@
         // Input live search
         input.addEventListener("input", renderResults);
 
-        // Gestione tastiera all'interno del modale (Frecce, Invio, ESC)
+        // Keyboard navigation inside modal (Arrows, Enter, ESC)
         input.addEventListener("keydown", (e) => {
             if (e.key === "Escape") {
                 e.preventDefault();
@@ -1072,15 +1074,15 @@
             }
         });
 
-        // Primo rendering
+        // Initial render
         renderResults();
 
-        // Focus immediato sull'input
+        // Immediate focus on search input
         setTimeout(() => input.focus(), 30);
     }
 
     /**
-     * Aggiorna la selezione visiva dell'elemento selezionato e ne esegue lo scroll automatico.
+     * Updates visual selection and auto-scrolls selected element into view.
      * @param {HTMLElement} container
      */
     function highlightSelectedItem(container) {
@@ -1096,7 +1098,7 @@
     }
 
     /**
-     * Chiude la finestra Spotlight e la rimuove dal DOM.
+     * Closes Spotlight modal and removes it from DOM.
      */
     function closeSpotlightModal() {
         const modal = document.getElementById(CONFIG.MODAL_ELEMENT_ID);
@@ -1104,7 +1106,7 @@
     }
 
     /**
-     * Sanifica una stringa per prevenire iniezioni HTML all'interno dei template literal.
+     * Sanitizes string to prevent HTML injection in template literals.
      * @param {string} str
      * @returns {string}
      */
@@ -1119,15 +1121,12 @@
     }
 
     // =========================================================================
-    // 8. REGISTRAZIONE SHORTCUT GLOBALI E PULSANTE NAVBAR
+    // 8. GLOBAL SHORTCUT REGISTRATION & NAVBAR TRIGGER BUTTON
     // =========================================================================
 
     /**
-     * Inietta la barra orizzontale di ricerca nella sezione schemes (.scheme-container .schemes)
-     * allineata a sinistra, ad altezza del pulsante 'Authorize'.
-     * Nel caso in cui l'API non abbia la sicurezza/Authorize configurata, Swagger UI non genera
-     * .scheme-container nel DOM; in tal caso crea un fallback container trasparente subito
-     * sotto .information-container per garantire che il campo di ricerca appaia sempre.
+     * Injects horizontal search bar into .scheme-container .schemes aligned left of Authorize.
+     * If Authorize is not present, creates fallback container below .information-container.
      */
     function renderTriggerButton() {
         if (document.getElementById(CONFIG.TRIGGER_BTN_ID)) return;
@@ -1135,10 +1134,10 @@
         const btn = document.createElement("button");
         btn.type = "button";
         btn.id = CONFIG.TRIGGER_BTN_ID;
-        btn.title = "Cerca endpoint per rotta, verbo o descrizione (Ctrl + K oppure /)";
+        btn.title = "Search endpoints by route, method or summary (Ctrl + K or /)";
         btn.innerHTML = `
             <span style="font-size: 15px; opacity: 0.85;">🔍</span>
-            <span class="spotlight-trigger-label">Cerca endpoint...</span>
+            <span class="spotlight-trigger-label">Search endpoints...</span>
             <div class="spotlight-kbd-group">
                 <span class="spotlight-kbd-pill">Ctrl K</span>
                 <span class="spotlight-kbd-pill">/</span>
@@ -1147,10 +1146,10 @@
 
         btn.addEventListener("click", openSpotlightModal);
 
-        // Caso 1: Swagger UI ha generato .scheme-container nativo (presenza di Authorize o schemes)
+        // Case 1: Swagger UI generated native .scheme-container (Authorize present)
         const nativeSchemesContainer = document.querySelector(`.swagger-ui .scheme-container:not(#${CONFIG.FALLBACK_CONTAINER_ID}) .schemes`);
         if (nativeSchemesContainer) {
-            // Rimuove eventuale fallback precedente se Swagger UI ha montato schemes in un secondo momento
+            // Remove previous fallback if Swagger UI mounted schemes later
             const oldFallback = document.getElementById(CONFIG.FALLBACK_CONTAINER_ID);
             if (oldFallback) oldFallback.remove();
 
@@ -1163,7 +1162,7 @@
             return;
         }
 
-        // Caso 2: Fallback quando Authorize / .scheme-container non è presente nell'API
+        // Case 2: Fallback container when Authorize / .scheme-container is absent
         const infoContainer = document.querySelector(".swagger-ui .information-container");
         if (infoContainer && infoContainer.parentNode) {
             let fallbackContainer = document.getElementById(CONFIG.FALLBACK_CONTAINER_ID);
@@ -1183,7 +1182,7 @@
     }
 
     /**
-     * Inietta e gestisce il pulsante floating "Torna in Cima" (Back to Top) in basso a destra.
+     * Injects and manages floating "Back to Top" button at bottom right.
      */
     function renderBackToTopButton() {
         if (!CONFIG.BACK_TO_TOP.ENABLED) return;
@@ -1205,7 +1204,7 @@
 
         document.body.appendChild(btn);
 
-        // Controllo visibilità con requestAnimationFrame su scroll
+        // Visibility check via requestAnimationFrame on scroll
         let scrollTicking = false;
         window.addEventListener(
             "scroll",
@@ -1228,11 +1227,11 @@
     }
 
     /**
-     * Registra i listener globali da tastiera (Ctrl+K, Cmd+K, /).
+     * Registers global keyboard listeners (Ctrl+K, Cmd+K, /).
      */
     function registerKeyboardShortcuts() {
         window.addEventListener("keydown", (event) => {
-            // Scorciatoia Ctrl+K o Cmd+K (MetaKey su MacOS)
+            // Shortcut Ctrl+K or Cmd+K (MetaKey on macOS)
             const isCtrlK = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === CONFIG.SHORTCUTS.PRIMARY_KEY;
 
             if (isCtrlK) {
@@ -1241,7 +1240,7 @@
                 return;
             }
 
-            // Scorciatoia '/' (solo quando il cursore non si trova già in un campo di input)
+            // Shortcut '/' (active only when not typing inside input/textarea/select)
             if (CONFIG.SHORTCUTS.SLASH_TRIGGER && event.key === "/") {
                 const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : "";
                 const isContentEditable = document.activeElement ? document.activeElement.isContentEditable : false;
@@ -1255,10 +1254,10 @@
     }
 
     // =========================================================================
-    // 9. INIZIALIZZAZIONE PLUGIN
+    // 9. PLUGIN INITIALIZATION
     // =========================================================================
     /**
-     * Registra il pulsante di ricerca Spotlight nell'Activity Bar modulare (se presente).
+     * Registers Spotlight search button in modular Activity Bar (if present).
      */
     function registerInActivityBar() {
         if (!window.SwaggerActivityBar || typeof window.SwaggerActivityBar.registerItem !== "function") return;
@@ -1266,8 +1265,8 @@
 
         window.SwaggerActivityBar.registerItem({
             id: "spotlight-search",
-            title: "Cerca endpoint per rotta, verbo o descrizione (Ctrl + K oppure /)",
-            ariaLabel: "Cerca endpoint",
+            title: "Search endpoints by route, method or summary (Ctrl + K or /)",
+            ariaLabel: "Search endpoints",
             iconHtml: `
                 <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:block;">
                     <circle cx="11" cy="11" r="8"/>
@@ -1298,12 +1297,12 @@
                 renderBackToTopButton();
                 registerKeyboardShortcuts();
 
-                // Se la pagina ha renderizzato la sezione schemes o l'info container o gli endpoint, completiamo l'inizializzazione
+                // If page has rendered schemes section, info container or endpoints, complete initialization
                 if (nativeSchemes || infoContainer || document.querySelector(".swagger-ui .opblock")) {
                     window.clearInterval(checkInterval);
                     setTimeout(buildEndpointsIndex, 600);
                     registerGuideDocumentation();
-                    console.info("[Swagger Spotlight] Plugin Command Palette inizializzato con successo.");
+                    console.info("[Swagger Spotlight] Command Palette plugin initialized successfully.");
                     return;
                 }
             }
@@ -1317,7 +1316,7 @@
 
         window.addEventListener("swagger-activity-bar:ready", registerGuideDocumentation);
 
-        // Observer per garantire la persistenza della barra in caso di re-render di Swagger UI
+        // DOM observer to ensure search bar persistence across Swagger UI re-renders
         const domObserver = new MutationObserver(() => {
             registerInActivityBar();
             if (!document.getElementById(CONFIG.TRIGGER_BTN_ID)) {
@@ -1330,7 +1329,7 @@
     let isGuideRegistered = false;
 
     /**
-     * Pubblica i metadati e la documentazione del plugin nella guida interattiva dell'Activity Bar (ID 27).
+     * Publishes plugin metadata and documentation to the interactive Activity Bar guide.
      */
     function registerGuideDocumentation() {
         if (isGuideRegistered) return;
@@ -1340,12 +1339,12 @@
                 id: "spotlight-search",
                 name: "Spotlight Search (Ctrl + K)",
                 version: "1.0.0",
-                description: "Ricerca rapida stile Command Palette con fuzzy search tra tutti gli endpoint, apertura asincrona dei controller e centratura glow.",
+                description: "Command Palette-style quick search with multi-token fuzzy matching across all endpoints, auto-expanding parent controllers, and visual glow centering.",
                 shortcuts: [
-                    "Ctrl + K: Apre la ricerca rapida Spotlight",
-                    "↑ / ↓: Naviga tra i risultati",
-                    "Invio: Raggiungi ed espandi l'endpoint",
-                    "Esc: Chiude la modale di ricerca"
+                    "Ctrl + K: Open Spotlight quick search",
+                    "↑ / ↓: Navigate between results",
+                    "Enter: Navigate to and expand endpoint",
+                    "Esc: Close search modal"
                 ],
                 iconHtml: `
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1354,17 +1353,17 @@
                     </svg>
                 `,
                 manual: `
-### Panoramica
-La Command Palette Spotlight consente di individuare ed espandere qualsiasi rotta API senza dover scorrere manualmente centinaia di endpoint in Swagger UI.
+### Overview
+The Spotlight Command Palette enables you to instantly locate and expand any API endpoint without manually scrolling through hundreds of operations in Swagger UI.
 
-### Scorciatoia Rapida
-Premi in qualunque momento \`Ctrl + K\` (o \`Cmd + K\` su Mac) oppure clicca la barra di ricerca orizzontale o l'icona della lente nell'Activity Bar.
+### Keyboard Shortcut
+Press \`Ctrl + K\` (or \`Cmd + K\` on macOS) at any time, or click the horizontal search bar in the navbar or the search lens in the Activity Bar.
 
-### Caratteristiche
-- **Ricerca Fuzzy**: cerca simultaneamente per percorso (\`/api/...\`), tag controller, descrizione e verbo HTTP (\`GET\`, \`POST\`, ecc.).
-- **Navigazione da Tastiera**: scorri le corrispondenze con le frecce \`↑\` e \`↓\` e premi \`Invio\` per saltare direttamente alla testata dell'endpoint.
-- **Espansione Asincrona**: se il controller padre è chiuso, viene espanso automaticamente e la pagina scorre con un anello luminoso Glow.
-- **Pulsante Torna in Cima**: un pulsante discreto fluttuante in basso a destra consente di ritornare all'inizio della pagina in un click.
+### Features
+- **Fuzzy Search**: Query simultaneously by path (\`/api/...\`), controller tags, summary, and HTTP method (\`GET\`, \`POST\`, etc.).
+- **Keyboard Navigation**: Scroll through matches with the \`↑\` and \`↓\` arrow keys and press \`Enter\` to jump directly to the target endpoint.
+- **Async Expansion**: Automatically unfolds collapsed controller groups and endpoints before smoothly scrolling with an animated glow ring.
+- **Back to Top Button**: A floating button in the bottom-right corner allows returning to the top of the documentation with a single click.
 `
             });
         }

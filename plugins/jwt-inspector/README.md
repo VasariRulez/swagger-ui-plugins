@@ -44,14 +44,28 @@ app.UseSwaggerUI(c =>
 
 ## Configuration Reference
 
-The inspector's behavior is defined via the internal `CONFIG` block in `swagger-jwt-inspector.js`:
+You can customize the JWT Inspector by providing `window.SwaggerJwtConfig`:
 
-| Setting | Default | Description |
-| :--- | :--- | :--- |
-| `APP_BEARER_SCHEME` | `"Bearer"` | Name of the primary API Bearer scheme registered in Swagger |
-| `MSAL_SCHEME` | `"MsalAuth"` | Name of the enterprise IDP / OAuth2 scheme registered in Swagger |
-| `WARNING_THRESHOLD_SECONDS` | `120` (2 mins) | Seconds remaining before expiration when the badge turns amber |
-| `COUNTDOWN_TICK_INTERVAL_MS` | `1000` ms | Refresh frequency of the countdown display |
+```html
+<script>
+  window.SwaggerJwtConfig = {
+    appSchemeName: "Bearer",               // Primary Bearer scheme name in OpenAPI (default: "Bearer")
+    msalSchemeName: "MsalAuth",            // Identity provider scheme name (default: "MsalAuth")
+    expiringThresholdMinutes: 5,           // Warning threshold in minutes before expiration (default: 2)
+    externalDebugger: "jwt.ms",            // 1-click external debugger: "jwt.ms" or "jwt.io" (default: "jwt.ms")
+    tokenStorageKeys: ["access_token"]     // LocalStorage keys checked as fallback if Redux state is empty
+  };
+</script>
+<script src="/plugins/jwt-inspector/swagger-jwt-inspector.js"></script>
+```
+
+| Setting | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `appSchemeName` | `string` | `"Bearer"` | Name of the primary API Bearer scheme registered in Swagger UI |
+| `msalSchemeName` | `string` | `"MsalAuth"` | Name of the enterprise IDP / OAuth2 scheme registered in Swagger UI |
+| `expiringThresholdMinutes` | `number` | `2` | Minutes remaining before expiration when countdown turns amber/warning |
+| `externalDebugger` | `string` | `"jwt.ms"` | Online JWT debugger opened via footer button (`"jwt.ms"` or `"jwt.io"`) |
+| `tokenStorageKeys` | `string[]` | `["access_token", ...]` | Keys searched in `localStorage` if token is absent from Redux |
 
 ---
 
@@ -62,4 +76,4 @@ The inspector's behavior is defined via the internal `CONFIG` block in `swagger-
 | `Escape` | Close the JWT Inspector modal dialog |
 
 > [!NOTE]
-> The claims inspector modal is opened by clicking **"Ispeziona Claims"** in the JWT status bar (located directly below Swagger UI's Authorize section) or by clicking the key icon in the **Activity Bar**.
+> The claims inspector modal is opened by clicking **"Inspect Claims"** in the JWT status bar (located directly below Swagger UI's Authorize section) or by clicking the key icon in the **Activity Bar**.

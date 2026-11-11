@@ -45,8 +45,45 @@ The plugin automatically analyzes your OpenAPI specification (`requestBody` sche
 ### 2. Polymorphic Inheritance & Discriminators
 - When a schema contains inheritance hierarchies or type discriminators (e.g. `$type`, `discriminator`, `oneOf`, `anyOf`), the plugin inspects the definitions and provides specialized presets for each concrete subtype with its discriminator pre-injected.
 
-### 3. Custom Developer Presets
+### 3. Custom Developer Presets & Host Predefined Presets
 - Custom payloads saved by developers are stored in `localStorage` under the key prefix `swp_swagger_preset_{method}_{path}` and remain available across page reloads.
+- Predefined host presets can be registered globally via `window.SwaggerPresetsConfig`.
+
+---
+
+## Configuration Reference
+
+You can supply global or endpoint-specific presets through `window.SwaggerPresetsConfig`:
+
+```html
+<script>
+  window.SwaggerPresetsConfig = {
+    // Map of "[HTTP_METHOD] [ROUTE_PATH]" -> array of preset objects or function
+    "POST /api/users": [
+      {
+        name: "Standard Active User",
+        payload: {
+          username: "jdoe",
+          email: "jdoe@example.com",
+          role: "User",
+          isActive: true
+        }
+      },
+      {
+        name: "Enterprise Admin",
+        payload: {
+          username: "admin_corp",
+          email: "admin@example.com",
+          role: "SuperAdmin",
+          isActive: true,
+          scopes: ["read:all", "write:all"]
+        }
+      }
+    ]
+  };
+</script>
+<script src="/plugins/dto-presets/swagger-dto-presets.js"></script>
+```
 
 ---
 
@@ -54,7 +91,7 @@ The plugin automatically analyzes your OpenAPI specification (`requestBody` sche
 
 1. Expand any endpoint in Swagger UI that accepts a request body.
 2. The **DTO Presets** toolbar appears directly above the body textarea.
-3. Select an automatic preset (Full, Minimal, or Polymorphic subtype) from the dropdown.
-4. Click **Applica** (Apply) to inject the JSON into Swagger's editable textarea, or **Copia** (Copy) to place it on your clipboard.
-5. Customize the JSON values in the textarea and click **Salva** (Save) to store it as a permanent custom preset for that endpoint.
-6. To remove a previously saved custom preset, select it from the dropdown and click **Elimina** (Delete).
+3. Select an automatic preset (Full, Minimal, or Polymorphic subtype), a host preset (`🌐`), or your custom favorites from the dropdown.
+4. Click **Apply** to inject the JSON into Swagger's editable textarea, or **Copy** to place it on your clipboard.
+5. Customize the JSON values in the textarea and click **Save** to store it as a permanent custom preset for that endpoint.
+6. To remove a previously saved custom preset, select it from the dropdown and click **Delete**.

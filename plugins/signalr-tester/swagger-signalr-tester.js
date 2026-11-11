@@ -1,63 +1,62 @@
 /**
  * @file swagger-signalr-tester.js
- * @summary Plugin Generico per il Test e Monitoraggio Real-Time di Hub SignalR in Swagger UI (OpenAPI / ASP.NET Core).
- *          Consente agli sviluppatori di connettersi a qualsiasi Hub SignalR (incluso l'hub unificato
- *          futuro o gli hub attuali), autenticarsi con il Bearer Token attivo, invocare metodi
- *          e ascoltare eventi broadcast in tempo reale con formattazione JSON colorata.
+ * @summary SignalR Real-Time Hub Testing and Monitoring plugin for Swagger UI (OpenAPI / ASP.NET Core).
+ *          Allows developers to connect to any SignalR Hub, authenticate with the active Bearer token,
+ *          invoke remote server methods, and monitor real-time broadcast events with formatted JSON.
  *
- * --- CARATTERISTICHE PRINCIPALI & ARCHITETTURA GENERICA ---
- * 1. 100% Generico e Agnostico:
- *    - Nessun metodo o rotta hardcodata vincolante: supporta qualsiasi percorso di Hub (/hubs/...),
- *      inclusa la transizione verso il singolo Hub unificato dell'applicazione.
- *    - Permette di digitare liberamente qualsiasi rotta di Hub o selezionare dai preset configurabili.
- * 2. Autenticazione Automatica con Bearer Token:
- *    - Rileva automaticamente l'access token attivo da Swagger UI ('swagger-token-interceptor.js'
- *      o Redux store 'ui.getState().get("auth")').
- *    - Passa il token sia tramite 'accessTokenFactory' che via query parameter '?access_token=...'.
- * 3. Invocazione Metodi Flessibile (Invoke/Send):
- *    - Consente di invocare qualsiasi metodo del server specificando nome e argomenti JSON.
- *    - Calcola e mostra i tempi di risposta (ms) e il valore restituito dal server.
- * 4. Ascolto Eventi Dinamico (Event Listeners):
- *    - Permette di registrare in tempo reale qualsiasi nome di evento (es. ReceiveTestMessage,
- *      ReceiveLeadNote, Notification, o eventi custom).
- *    - Registra istantaneamente i payload ricevuti dal server con formattazione JSON.
- * 5. Console Live Interattiva:
- *    - Pannello cassetto (Drawer) a comparsa sul lato destro, collassabile, senza oscurare Swagger.
- *    - Log in tempo reale con badge colorati (Inviati, Ricevuti, Connessione, Errori).
- *    - Filtri per tipo di messaggio, pulsanti di copia e pulizia cronologia.
- * 6. Supporto Temi Completo:
- *    - Totalmente sincronizzato con il tema Chiaro e Scuro di Swagger UI.
- *
- * --- GUIDA ALLA MANUTENZIONE PER SVILUPPATORI ---
- * - Per modificare i percorsi Hub predefiniti: Aggiornare `CONFIG.DEFAULT_HUB_PRESETS`.
- * - Per modificare gli eventi predefiniti: Aggiornare `CONFIG.DEFAULT_EVENT_LISTENERS`.
- * - Per modificare le chiavi di memorizzazione: Aggiornare `CONFIG.STORAGE_KEYS`.
+ * --- CORE FEATURES & GENERIC ARCHITECTURE ---
+ * 1. 100% Generic & Agnostic:
+ *    - Configurable hub routes and event listeners without hardcoded domain bindings.
+ *    - Allows typing any Hub URL or selecting from configurable host presets.
+ * 2. Automatic Bearer Token Authentication:
+ *    - Discovers active access token from Swagger UI Redux store or interceptor.
+ *    - Passes token via both `accessTokenFactory` and query parameter `?access_token=...`.
+ * 3. Flexible Remote Method Invocation:
+ *    - Invokes remote methods with JSON arguments and tracks round-trip latency (ms).
+ * 4. Dynamic Broadcast Event Listeners:
+ *    - Dynamically registers listeners for any event name and formats incoming payloads.
+ * 5. Interactive Live Drawer Console:
+ *    - Right-hand slide-out drawer seamlessly coordinated with Swagger UI layout.
+ *    - Color-coded log badges, filtering, and 1-click clipboard export.
+ * 6. Theme Integration:
+ *    - Synchronized with Swagger UI Light and Dark modes.
  */
 (() => {
     "use strict";
 
     // =========================================================================
-    // 1. CONFIGURAZIONE GENERALE (Modificabile dallo sviluppatore)
+    // 1. GENERAL CONFIGURATION (Host Injection & Defaults)
     // =========================================================================
+    const userConfig = window.SwaggerSignalRConfig || {};
+
     const CONFIG = {
-        /** Elenco percorsi Hub suggeriti nel menu a tendina (l'utente può comunque inserire percorsi custom) */
-        DEFAULT_HUB_PRESETS: [
-            { label: "Hub Note e Conversazioni Lead", path: "/hubs/lead-notes" },
-            { label: "Hub Chat Candidato", path: "/hubs/candidate-chat" },
-            { label: "Hub Notifiche Generico", path: "/hubs/notifications" }
-        ],
+        /** Suggested Hub presets in dropdown (users can also type custom paths directly) */
+        DEFAULT_HUB_PRESETS: Array.isArray(userConfig.hubs) && userConfig.hubs.length > 0
+            ? userConfig.hubs.map((h) => ({ label: h.name || h.label || h.url || h.path, path: h.url || h.path }))
+            : [
+                { label: "Notifications Hub", path: "/hubs/notifications" },
+                { label: "Chat Hub", path: "/hubs/chat" },
+                { label: "Live Telemetry Hub", path: "/hubs/telemetry" }
+            ],
 
-        /** Nomi di eventi broadcast suggeriti per l'ascolto */
-        DEFAULT_EVENT_LISTENERS: [
-            "ReceiveTestMessage",
-            "ReceiveLeadNote",
-            "ReceiveMessage",
-            "LeadUpdated",
-            "UserJoined",
-            "Notification"
-        ],
+        /** Suggested broadcast event names for listening */
+        DEFAULT_EVENT_LISTENERS: Array.isArray(userConfig.defaultListeners) && userConfig.defaultListeners.length > 0
+            ? userConfig.defaultListeners
+            : [
+                "ReceiveMessage",
+                "ReceiveNotification",
+                "Heartbeat",
+                "UserJoined",
+                "DataUpdated"
+            ],
 
-        /** Chiavi per la persistenza su LocalStorage */
+        /** Transport protocol preference: "WebSockets" | "LongPolling" | "ServerSentEvents" */
+        TRANSPORT: userConfig.transport || "WebSockets",
+
+        /** Automatic reconnection toggle (default: true) */
+        AUTO_RECONNECT: userConfig.autoReconnect !== false,
+
+        /** LocalStorage persistence keys */
         STORAGE_KEYS: {
             LAST_HUB: "swp_signalr_last_hub",
             RECENT_HUBS: "swp_signalr_recent_hubs",
@@ -81,7 +80,7 @@
     // 2. STATO RUNTIME IN-MEMORY
     // =========================================================================
     const state = {
-        /** Istanza HubConnection attiva di SignalR */
+        /** Active SignalR HubConnection instance */
         connection: null,
 
         /** Stato connessione: "disconnected" | "connecting" | "connected" | "reconnecting" */
@@ -93,7 +92,7 @@
         /** Lista di eventi attualmente registrati in ascolto */
         activeListeners: new Set(),
 
-        /** Log degli eventi e messaggi */
+        /** Event and message log history */
         logEntries: [],
 
         /** Timestamp di inizio dell'ultima connessione */
@@ -134,14 +133,14 @@
                 }
             }
         } catch {
-            // Ignora errori di parsing dello state
+            // Ignore state parsing errors
         }
 
         return null;
     }
 
     /**
-     * Verifica se il tema scuro è attivo nella pagina.
+     * Checks if dark mode is active on the page.
      * @returns {boolean}
      */
     function isDarkModeActive() {
@@ -177,7 +176,7 @@
     }
 
     // =========================================================================
-    // 4. GESTORE DELLA CONNESSIONE SIGNALR
+    // 4. SIGNALR CONNECTION MANAGER
     // =========================================================================
 
     /**
@@ -208,29 +207,41 @@
         try {
             const token = useAuth ? getActiveBearerToken() : null;
 
-            // Opzioni di connessione con supporto WebSockets e query parameter access_token
+            // Resolve transport based on user configuration
+            let transportType = window.signalR.HttpTransportType.WebSockets | window.signalR.HttpTransportType.LongPolling;
+            if (CONFIG.TRANSPORT === "WebSockets") {
+                transportType = window.signalR.HttpTransportType.WebSockets;
+            } else if (CONFIG.TRANSPORT === "LongPolling") {
+                transportType = window.signalR.HttpTransportType.LongPolling;
+            } else if (CONFIG.TRANSPORT === "ServerSentEvents") {
+                transportType = window.signalR.HttpTransportType.ServerSentEvents;
+            }
+
             const options = {
-                transport: window.signalR.HttpTransportType.WebSockets | window.signalR.HttpTransportType.LongPolling
+                transport: transportType
             };
 
             if (token) {
                 options.accessTokenFactory = () => token;
             }
 
-            // Costruzione URL completa (se relativo, concatena window.location.origin)
+            // Construct full URL (if relative, prefix with window.location.origin)
             const fullUrl = normalizedUrl.startsWith("http")
                 ? normalizedUrl
                 : `${window.location.origin}${normalizedUrl.startsWith("/") ? "" : "/"}${normalizedUrl}`;
 
-            const builder = new window.signalR.HubConnectionBuilder()
+            let builder = new window.signalR.HubConnectionBuilder()
                 .withUrl(fullUrl, options)
-                .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
                 .configureLogging(window.signalR.LogLevel.Information);
+
+            if (CONFIG.AUTO_RECONNECT) {
+                builder = builder.withAutomaticReconnect([0, 2000, 5000, 10000, 30000]);
+            }
 
             state.connection = builder.build();
             state.currentHubUrl = normalizedUrl;
 
-            // Configura callback di ciclo di vita della connessione
+            // Configure connection lifecycle callbacks
             state.connection.onreconnecting((error) => {
                 updateStatus("reconnecting");
                 addLog("warn", `Riconnessione automatica in corso... ${error ? error.message : ""}`);
@@ -257,7 +268,7 @@
                 bindListenerToConnection(eventName);
             });
 
-            // Avvio effettivo della connessione
+            // Start SignalR connection
             await state.connection.start();
 
             state.connectionId = state.connection.connectionId || "Disponibile";
@@ -265,7 +276,7 @@
             updateStatus("connected");
             addLog("success", `Connesso con successo all'Hub! ConnectionId: ${state.connectionId}`);
 
-            // Salva l'ultimo hub utilizzato in localStorage e aggiorna la cronologia
+            // Save last used Hub to localStorage and update history
             localStorage.setItem(CONFIG.STORAGE_KEYS.LAST_HUB, normalizedUrl);
             saveRecentHub(normalizedUrl);
             populateHubDropdown();
@@ -273,7 +284,7 @@
         } catch (error) {
             updateStatus("disconnected");
             state.connection = null;
-            addLog("error", `Errore durante la connessione all'Hub: ${error.message || error}`);
+            addLog("error", `Error connecting to Hub: ${error.message || error}`);
             return false;
         }
     }
@@ -292,7 +303,7 @@
             addLog("info", "Disconnessione in corso...");
             await state.connection.stop();
         } catch (err) {
-            console.warn("[SignalR Tester] Errore in stop:", err);
+            console.warn("[SignalR Tester] Error stopping connection:", err);
         } finally {
             state.connection = null;
             state.connectionId = null;
@@ -301,20 +312,20 @@
     }
 
     /**
-     * Invoca un metodo del server (Invoke con Promise).
-     * @param {string} methodName - Nome metodo C# sull'Hub (es. "JoinLead", "SendTestMessage")
+     * Invokes a server method via Promise.
+     * @param {string} methodName - Remote method name on the Hub
      * @param {any[]} args - Array di parametri
      * @returns {Promise<any>}
      */
     async function invokeHubMethod(methodName, args = []) {
         if (!state.connection || state.status !== "connected") {
-            addLog("error", "Impossibile invocare il metodo: Connessione SignalR non attiva.");
+            addLog("error", "Unable to invoke method: SignalR connection is not active.");
             return;
         }
 
         const name = (methodName || "").trim();
         if (!name) {
-            addLog("error", "Specificare il nome del metodo da invocare.");
+            addLog("error", "Please specify the method name to invoke.");
             return;
         }
 
@@ -328,19 +339,19 @@
             return result;
         } catch (error) {
             const durationMs = Date.now() - startTime;
-            addLog("error", `Errore durante l'invocazione di '${name}' (⏱ ${durationMs}ms): ${error.message || error}`);
+            addLog("error", `Error invoking '${name}' (⏱ ${durationMs}ms): ${error.message || error}`);
             throw error;
         }
     }
 
     /**
-     * Aggancia un listener di eventi alla connessione attiva.
+     * Attaches an event listener to the active connection.
      * @param {string} eventName
      */
     function bindListenerToConnection(eventName) {
         if (!state.connection) return;
 
-        // Rimuove eventuali handler precedenti per non duplicare
+        // Remove any previous handler to avoid duplicates
         state.connection.off(eventName);
 
         state.connection.on(eventName, (...args) => {
@@ -365,7 +376,7 @@
     }
 
     /**
-     * Rimuove un evento dall'ascolto.
+     * Unregisters an event listener.
      * @param {string} eventName
      */
     function unregisterEventListener(eventName) {
@@ -379,7 +390,7 @@
     }
 
     /**
-     * Salva i listener configurati nel LocalStorage.
+     * Saves configured listeners to localStorage.
      */
     function saveListenersToStorage() {
         try {
@@ -390,7 +401,7 @@
     }
 
     /**
-     * Carica i listener salvati nel LocalStorage.
+     * Loads persisted listeners from localStorage.
      */
     function loadListenersFromStorage() {
         try {
@@ -411,7 +422,7 @@
     }
 
     /**
-     * Carica l'elenco degli Hub recenti/personalizzati salvati in LocalStorage.
+     * Loads recent/custom Hub URLs from localStorage.
      * @returns {string[]}
      */
     function loadRecentHubs() {
@@ -428,7 +439,7 @@
     }
 
     /**
-     * Aggiunge un URL di Hub alla cronologia degli Hub recenti (evitando duplicati).
+     * Adds Hub URL to recent history avoiding duplicates.
      * @param {string} hubUrl
      */
     function saveRecentHub(hubUrl) {
@@ -436,7 +447,7 @@
         const normalized = hubUrl.trim();
         if (!normalized) return;
 
-        // Se è già presente tra i preset di default, non serve salvarlo tra i custom
+        // If already present among default presets, skip saving to custom
         const isDefault = CONFIG.DEFAULT_HUB_PRESETS.some((p) => p.path.toLowerCase() === normalized.toLowerCase());
         if (isDefault) return;
 
@@ -452,7 +463,7 @@
     }
 
     /**
-     * Popola dinamicamente il menu a tendina degli Hub (Default + Recenti dell'utente).
+     * Dynamically populates Hub dropdown (Defaults + User recents).
      */
     function populateHubDropdown() {
         const select = document.getElementById("signalr-preset-select");
@@ -490,7 +501,7 @@
     // =========================================================================
 
     /**
-     * Aggiunge un record al log delle attività e aggiorna la visualizzazione.
+     * Adds entry to activity log and updates view.
      * @param {"info"|"success"|"warn"|"error"|"sent"|"received"} type
      * @param {string} message
      * @param {any} [payload]
@@ -520,7 +531,7 @@
         state.logEntries = [];
         const container = document.getElementById("signalr-log-stream");
         if (container) {
-            container.innerHTML = `<div class="signalr-log-empty">Nessun evento registrato. Connettiti all'Hub per iniziare.</div>`;
+            container.innerHTML = `<div class="signalr-log-empty">No events recorded. Connect to a Hub to begin.</div>`;
         }
     }
 
@@ -1038,16 +1049,16 @@
     }
 
     // =========================================================================
-    // 7. RENDERING E INTERFACCIA UTENTE
+    // 7. UI RENDERING
     // =========================================================================
 
     /**
      * Registra il trigger SignalR nell'Activity Bar se disponibile,
-     * altrimenti effettua il fallback posizionando il pulsante nella pagina.
+     * otherwise falls back to standard page button.
      */
     function setupTrigger() {
         if (window.SwaggerActivityBar && typeof window.SwaggerActivityBar.registerItem === "function") {
-            // Rimuove l'eventuale fallback precedentemente iniettato
+            // Remove previously injected fallback if present
             const fallbackBtn = document.getElementById(CONFIG.ELEMENT_IDS.TRIGGER_BTN);
             if (fallbackBtn && !fallbackBtn.closest("#swagger-activity-bar")) {
                 fallbackBtn.remove();
@@ -1058,7 +1069,7 @@
 
             window.SwaggerActivityBar.registerItem({
                 id: "signalr-tester",
-                title: "SignalR Live Hub Tester (Apri / Chiudi Console)",
+                title: "SignalR Live Hub Tester (Open / Close Console)",
                 ariaLabel: "SignalR Live Hub Tester",
                 iconHtml: `
                     <span class="signalr-icon-wrap">
@@ -1080,12 +1091,12 @@
             return;
         }
 
-        // Fallback: iniezione del pulsante standard nella pagina Swagger UI (se Activity Bar assente)
+        // Fallback: inject standard button into Swagger UI if Activity Bar is absent
         renderFallbackTriggerButton();
     }
 
     /**
-     * Renderizza il pulsante trigger di fallback in Swagger UI (se l'Activity Bar è assente).
+     * Renders fallback trigger button in Swagger UI if Activity Bar is absent.
      */
     function renderFallbackTriggerButton() {
         if (document.getElementById(CONFIG.ELEMENT_IDS.TRIGGER_BTN)) return;
@@ -1094,7 +1105,7 @@
         btn.type = "button";
         btn.id = CONFIG.ELEMENT_IDS.TRIGGER_BTN;
         btn.className = "signalr-fallback-trigger-btn";
-        btn.title = "SignalR Live Hub Tester (Apri / Chiudi Console)";
+        btn.title = "SignalR Live Hub Tester (Open / Close Console)";
         btn.innerHTML = `
             <span class="signalr-status-dot signalr-status-dot--${state.status}"></span>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle;">
@@ -1129,7 +1140,7 @@
     }
 
     /**
-     * Inietta il Drawer della console SignalR nel DOM.
+     * Injects SignalR console drawer into DOM.
      */
     function renderDrawer() {
         if (document.getElementById(CONFIG.ELEMENT_IDS.DRAWER)) return;
@@ -1150,7 +1161,7 @@
                     <span class="signalr-status-dot signalr-status-dot--disconnected"></span>
                     <span>Console SignalR Hub Tester</span>
                 </div>
-                <button type="button" class="signalr-btn-close btn-close-drawer" title="Chiudi console (ESC)">✕</button>
+                <button type="button" class="signalr-btn-close btn-close-drawer" title="Close console (ESC)">✕</button>
             </div>
 
             <div class="signalr-drawer-body">
@@ -1200,7 +1211,7 @@
                     <div class="signalr-section-header" data-toggle="signalr-sec-invoke" title="Clicca per espandere / collassare">
                         <div class="signalr-section-title-wrap">
                             <span class="signalr-collapse-icon">▼</span>
-                            <span>2. Invoca Metodo (Client -> Hub)</span>
+                            <span>2. Invoke Method (Client -> Hub)</span>
                         </div>
                         <span id="signalr-invoke-summary-badge" class="signalr-summary-chip" style="display:none;"></span>
                     </div>
@@ -1208,7 +1219,7 @@
                     <div class="signalr-section-content">
                         <div style="display:flex; flex-direction:column; gap:6px;">
                             <div style="display:flex; gap:6px;">
-                                <input id="signalr-method-name-input" class="signalr-input" type="text" placeholder="Nome Metodo C# (es. JoinLead, SendTestMessage)" style="flex:1;" />
+                                <input id="signalr-method-name-input" class="signalr-input" type="text" placeholder="Method Name (e.g. JoinGroup, SendMessage)" style="flex:1;" />
                                 <button type="button" id="signalr-btn-invoke" class="signalr-btn signalr-btn-primary">
                                     🚀 Invoca
                                 </button>
@@ -1243,7 +1254,7 @@
                     </div>
                 </div>
 
-                <!-- Sezione 4: Log Attività in Tempo Reale (Auto-Fill dello Spazio Rimanente) -->
+                <!-- Section 4: Real-Time Activity Log -->
                 <div class="signalr-section signalr-section--log">
                     <div class="signalr-section-title">
                         <span>4. Log Eventi in Tempo Reale</span>
@@ -1254,7 +1265,7 @@
                     </div>
 
                     <div id="signalr-log-stream" class="signalr-log-stream">
-                        <div class="signalr-log-empty">Nessun evento registrato. Connettiti all'Hub per iniziare.</div>
+                        <div class="signalr-log-empty">No events recorded. Connect to a Hub to begin.</div>
                     </div>
                 </div>
             </div>
@@ -1288,7 +1299,7 @@
         // Chiusura drawer
         drawer.querySelector(".btn-close-drawer")?.addEventListener("click", toggleDrawer);
 
-        // Chiusura con tasto ESC quando il drawer è aperto
+        // Close on ESC key when drawer is open
         window.addEventListener("keydown", (e) => {
             if (e.key === "Escape" && drawer.classList.contains("is-open")) {
                 toggleDrawer();
@@ -1304,7 +1315,7 @@
             }
         });
 
-        // Pulsante Connetti
+        // Connect button
         const btnConnect = document.getElementById("signalr-btn-connect");
         btnConnect?.addEventListener("click", async () => {
             const hubUrl = urlInput.value.trim();
@@ -1312,13 +1323,13 @@
             await connectToHub(hubUrl, useAuth);
         });
 
-        // Pulsante Disconnetti
+        // Disconnect button
         const btnDisconnect = document.getElementById("signalr-btn-disconnect");
         btnDisconnect?.addEventListener("click", async () => {
             await disconnectFromHub();
         });
 
-        // Pulsante Invoca
+        // Invoke button
         const btnInvoke = document.getElementById("signalr-btn-invoke");
         const methodInput = document.getElementById("signalr-method-name-input");
         const argsInput = document.getElementById("signalr-args-input");
@@ -1340,7 +1351,7 @@
         btnInvoke?.addEventListener("click", async () => {
             const methodName = methodInput.value.trim();
             if (!methodName) {
-                alert("Specificare il nome del metodo.");
+                alert("Please specify the method name.");
                 return;
             }
 
@@ -1359,11 +1370,11 @@
             try {
                 await invokeHubMethod(methodName, args);
             } catch {
-                // Errore già loggato in addLog
+                // Error already logged via addLog
             }
         });
 
-        // Pulsante Aggiungi Listener
+        // Add Listener button
         const btnAddListener = document.getElementById("signalr-btn-add-listener");
         const newListenerInput = document.getElementById("signalr-new-listener-input");
 
@@ -1383,16 +1394,16 @@
             }
         });
 
-        // Pulsante Pulisci Log
+        // Clear Logs button
         document.getElementById("signalr-btn-clear-log")?.addEventListener("click", clearLogs);
 
-        // Pulsante Copia Log
+        // Copy Logs button
         document.getElementById("signalr-btn-copy-log")?.addEventListener("click", () => {
             if (state.logEntries.length === 0) return;
             const text = state.logEntries
                 .map((e) => `[${e.time}] [${e.type.toUpperCase()}] ${e.message} ${e.payload ? JSON.stringify(e.payload) : ""}`)
                 .join("\n");
-            navigator.clipboard.writeText(text).then(() => alert("Log copiato negli appunti!"));
+            navigator.clipboard.writeText(text).then(() => alert("Logs copied to clipboard!"));
         });
     }
 
@@ -1421,7 +1432,7 @@
     }
 
     /**
-     * Aggiorna lo stato visivo della connessione (badge, bottoni, pallini).
+     * Updates connection visual state (badges, buttons, indicators).
      * @param {"disconnected"|"connecting"|"connected"|"reconnecting"} newStatus
      */
     function updateStatus(newStatus) {
@@ -1480,14 +1491,14 @@
                 indicator.textContent = "Token attivo rilevato ✓";
                 indicator.style.color = "#10b981";
             } else {
-                indicator.textContent = "Nessun token (Anonimo)";
+                indicator.textContent = "No token (Anonymous)";
                 indicator.style.color = "#f59e0b";
             }
         }
     }
 
     /**
-     * Renderizza i tag degli eventi attualmente in ascolto.
+     * Renders tags for currently registered event listeners.
      */
     function renderListenersList() {
         const container = document.getElementById("signalr-tags-container");
@@ -1524,7 +1535,7 @@
         const container = document.getElementById("signalr-log-stream");
         if (!container) return;
 
-        // Rimuove l'avviso di log vuoto se presente
+        // Remove empty log state if present
         const emptyMsg = container.querySelector(".signalr-log-empty");
         if (emptyMsg) emptyMsg.remove();
 
@@ -1550,7 +1561,7 @@
     }
 
     // =========================================================================
-    // 8. INIZIALIZZAZIONE PLUGIN
+    // 8. PLUGIN INITIALIZATION
     // =========================================================================
     function initialize() {
         const startTime = Date.now();
@@ -1571,7 +1582,7 @@
                     toggleDrawer(true);
                 }
 
-                // In caso di caricamento asincrono dell'Activity Bar
+                // In case of asynchronous Activity Bar loading
                 window.addEventListener("swagger-activity-bar:ready", () => {
                     setupTrigger();
                     registerGuideDocumentation();
@@ -1601,7 +1612,7 @@
     let isGuideRegistered = false;
 
     /**
-     * Pubblica i metadati e la documentazione del plugin nella guida interattiva dell'Activity Bar (ID 27).
+     * Publishes plugin metadata and documentation to interactive Activity Bar guide.
      */
     function registerGuideDocumentation() {
         if (isGuideRegistered) return;
@@ -1611,11 +1622,11 @@
                 id: "signalr-tester",
                 name: "SignalR Live Hub Tester",
                 version: "1.0.0",
-                description: "Console interattiva per connettersi a qualsiasi Hub SignalR, invocare metodi C# in tempo reale e monitorare gli eventi broadcast.",
+                description: "Interactive debugging studio to connect to any SignalR Hub, invoke backend methods in real time, and monitor broadcast events.",
                 shortcuts: [
-                    "Esc: Chiude il drawer laterale",
-                    "Click Header Sezioni: Comprime o espande i box di configurazione",
-                    "Copia Log: Esporta la cronologia degli eventi"
+                    "Esc: Close slide-out drawer",
+                    "Click Section Header: Collapse or expand configuration boxes",
+                    "Copy Logs: Export event log history"
                 ],
                 iconHtml: `
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -1627,17 +1638,17 @@
                     </svg>
                 `,
                 manual: `
-### Panoramica
-La console SignalR consente di testare la comunicazione bidirezionale WebSocket in tempo reale direttamente in Swagger UI, senza bisogno di client esterni.
+### Overview
+The SignalR console allows testing bidirectional real-time WebSocket communication directly inside Swagger UI without external tools.
 
-### Connessione all'Hub
-- **Rotta Hub Flessibile**: connettiti a qualsiasi percorso relativo (es. \`/hubs/notifications\`, \`/hubs/chat\`) o seleziona un hub suggerito dalla cronologia.
-- **Autenticazione Trasparente**: inietta il token JWT attivo sia tramite \`accessTokenFactory\` che tramite query string \`?access_token=...\` per negoziazioni WebSocket.
+### Hub Connection
+- **Flexible Hub Routes**: connect to any relative Hub endpoint (e.g., \`/hubs/notifications\`, \`/hubs/chat\`) or select from presets.
+- **Transparent Authentication**: automatically supplies active Bearer token via both \`accessTokenFactory\` and \`?access_token=...\` query parameter.
 
-### Funzionalità della Console
-- **Invocazione Metodi C#**: chiama metodi remoti passando argomenti JSON con tracciamento istantaneo della latenza.
-- **Listener Broadcast**: ricevi e ispeziona gli eventi broadcast inviati dal server ad altri client o gruppi.
-- **Affiancamento Fluido**: aprendo la console il corpo di Swagger UI si comprime (\`padding-right: 480px\`), consentendo di invocare endpoint REST e osservare simultaneamente gli eventi SignalR.
+### Console Capabilities
+- **Invoke Server Methods**: call backend methods with JSON arguments and real-time round-trip latency tracking.
+- **Broadcast Listeners**: register custom event names to inspect messages broadcasted by the server.
+- **Side-by-Side Workflow**: the console drawer offsets Swagger UI content (\`padding-right: 480px\`), enabling simultaneous REST endpoint execution and SignalR event observation.
 `
             });
         }

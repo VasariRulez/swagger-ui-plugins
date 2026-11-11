@@ -1,53 +1,53 @@
 /**
  * @file swagger-data-grid-view.js
- * @summary Plugin Data Grid & Table View per Endpoint di Lista in Swagger UI (OpenAPI / REST).
- *          Rileva automaticamente risposte contenenti elenchi di dati (envelope PagedResult<T>,
- *          array standard o envelope generici) e inietta un selettore di visualizzazione [📄 Vista JSON] / [📊 Vista Tabella].
- *          Fornisce una griglia interattiva con ordinamento colonne, ricerca full-text, celle tipizzate
- *          (GUID con copia rapida, date localizzate, badge booleani, popover sotto-JSON per oggetti annidati),
- *          esportazione CSV nativa e paginazione live sincronizzata in-place con Swagger UI.
+ * @summary Interactive Data Grid & Table View plugin for list endpoints in Swagger UI (OpenAPI / REST).
+ *          Automatically detects responses containing list datasets (PagedResult<T>, direct arrays, or generic envelopes)
+ *          and injects a view toggle [📄 JSON View] / [📊 Table View].
+ *          Provides an interactive grid with column sorting, full-text search, typed cells
+ *          (1-click GUID copy, localized dates, boolean pills, nested sub-JSON modal popovers),
+ *          customizable CSV export, and live pagination synchronized with Swagger UI.
  *
- * --- CARATTERISTICHE PRINCIPALI ---
- * 1. Riconoscimento Euristico Dati Tabulari:
- *    - Riconosce `Result<PagedResult<T>>` (`json.value.items`), array diretti (`[...]`) ed envelope standard.
- *    - Rimane totalmente trasparente e invisibile per risposte non tabulari (oggetti singoli, primitive, errori 4xx/5xx).
- * 2. Visualizzazione Non Invasiva (Default JSON):
- *    - La vista predefinita resta il JSON standard (o il visualizzatore formattato esistente).
- *    - L'utente attiva la tabella con un click sul pulsante toggle dedicato.
- * 3. Navigazione Orizzontale Ottimizzata:
- *    - Scroll orizzontale fluido (`overflow-x: auto`) con prima colonna fissa (Sticky ID/Key).
- *    - Menu contestuale [👁️ Colonne] per mostrare/nascondere singole colonne secondarie su DTO ampi (15+ campi).
- * 4. Paginazione Live In-Place:
- *    - Per endpoint con paginazione server (es. Leads, CandidateTechnicalFeedback), i pulsanti Next/Prev aggiornano
- *      automaticamente il parametro nel form di Swagger ed eseguono la chiamata mantenendo la tabella attiva.
- *    - Per array non paginati dal server, applica paginazione client-side fluida (15/25/50 righe) per leggerezza DOM.
- * 5. Pieno Supporto Light & Dark Mode.
- *
- * --- GUIDA ALLA MANUTENZIONE PER SVILUPPATORI ---
- * - Per modificare i formati di default o la dimensione pagina: Modificare `CONFIG`.
- * - Per personalizzare gli stili della tabella: Vedere `injectStyles()`.
+ * --- CORE FEATURES ---
+ * 1. Heuristic Dataset Recognition:
+ *    - Detects `Result<PagedResult<T>>` (`json.value.items`), direct arrays (`[...]`), and standard envelopes.
+ *    - Completely invisible for non-tabular responses (single objects, primitives, error responses).
+ * 2. Non-Invasive Toggle:
+ *    - Default view remains formatted JSON.
+ *    - Users can switch to Table View on demand.
+ * 3. Optimized Horizontal Navigation:
+ *    - Smooth horizontal scroll (`overflow-x: auto`) with sticky primary column.
+ *    - Contextual column visibility menu to hide/show secondary fields on wide DTOs.
+ * 4. Live In-Place Server & Client Pagination.
+ * 5. Light & Dark theme support.
  */
 (() => {
     "use strict";
 
     // =========================================================================
-    // 1. CONFIGURAZIONE GENERALE (Modificabile dallo sviluppatore)
+    // 1. GENERAL CONFIGURATION (Host Injection & Defaults)
     // =========================================================================
+    const userConfig = window.SwaggerDataGridConfig || {};
+
     const CONFIG = {
-        /** Dimensione pagina predefinita per paginazione client-side */
-        DEFAULT_CLIENT_PAGE_SIZE: 15,
+        /** Default page size for client-side pagination */
+        DEFAULT_CLIENT_PAGE_SIZE: typeof userConfig.defaultPageSize === "number" ? userConfig.defaultPageSize : 15,
 
-        /** Opzioni disponibili per righe per pagina client-side */
-        PAGE_SIZE_OPTIONS: [10, 15, 25, 50],
+        /** Available choices for rows per page in client pagination */
+        PAGE_SIZE_OPTIONS: Array.isArray(userConfig.pageSizeOptions) ? userConfig.pageSizeOptions : [10, 15, 25, 50],
 
-        /** Nomi parametri comuni usati per la paginazione in C# / OpenAPI */
+        /** Optional custom CSV filename generator function: (path, method) => string */
+        GET_CSV_FILENAME: typeof userConfig.getCsvFilename === "function" ? userConfig.getCsvFilename : null,
+
+        /** Recognized query parameter names for page number */
         PAGE_PARAM_NAMES: ["page", "pageindex", "pagenumber", "page_number", "page_index"],
+
+        /** Recognized query parameter names for page size */
         PAGE_SIZE_PARAM_NAMES: ["pagesize", "page_size", "perpage", "limit", "take"],
 
-        /** ID elemento stile CSS iniettato */
+        /** Injected style element ID */
         STYLE_ID: "swagger-data-grid-view-styles",
 
-        /** Prefisso classi DOM */
+        /** CSS class prefix */
         CSS_PREFIX: "swagger-grid"
     };
 
@@ -103,7 +103,7 @@
                 box-sizing: border-box;
             }
 
-            /* Barra Toggle [📄 JSON] / [📊 Tabella] */
+            /* Toggle Toolbar [📄 JSON] / [📊 Table] */
             .swagger-grid-toggle-bar {
                 display: flex;
                 align-items: center;
@@ -321,7 +321,7 @@
                 background: var(--grid-bg-hover);
             }
 
-            /* --- Tabella Dati (Scroll Orizzontale + Sticky Header & Column) --- */
+            /* --- Data Table (Horizontal Scroll + Sticky Header & Column) --- */
             .swagger-grid-scroll-pane {
                 width: 100%;
                 overflow-x: auto;
@@ -395,7 +395,7 @@
                 background: var(--grid-bg-hover);
             }
 
-            /* Bug 1 Fix: Header della colonna sticky - Sticky SIA in orizzontale (left: 0) che in verticale (top: 0) con z-index 10 */
+            /* Sticky column header - Sticky both horizontally (left: 0) and vertically (top: 0) with z-index 10 */
             .swagger-grid-table th.swagger-grid-th-sticky {
                 position: sticky !important;
                 top: 0 !important;
@@ -407,7 +407,7 @@
                 box-shadow: 2px 0 5px rgba(0, 0, 0, 0.08);
             }
 
-            /* Celle del corpo della colonna sticky - Sticky in orizzontale (left: 0) con z-index 3 */
+            /* Sticky body cell - Sticky horizontally (left: 0) with z-index 3 */
             .swagger-grid-table td.swagger-grid-td-sticky {
                 position: sticky !important;
                 left: 0 !important;
@@ -547,7 +547,7 @@
                 margin: 0 4px;
             }
 
-            /* Bug 3 Fix: Popover Modale con Sfondo OPACO e Robusto in Light e Dark Mode */
+            /* Modal Popover with opaque backdrop in Light and Dark Mode */
             .swagger-grid-popover-overlay {
                 position: fixed;
                 top: 0;
@@ -632,7 +632,7 @@
                 color: #f1f5f9 !important;
             }
 
-            /* Overlay di Caricamento Paginazione Live */
+            /* Live Pagination Loading Overlay */
             .swagger-grid-loading-overlay {
                 position: absolute;
                 top: 0;
@@ -676,7 +676,7 @@
     // =========================================================================
 
     /**
-     * Tenta di parsare una stringa JSON o restituisce null se non valida.
+     * Attempts to parse JSON string or returns null if invalid.
      * @param {string} text
      * @returns {any|null}
      */
@@ -818,7 +818,7 @@
      * Formatta il valore di una cella in base al tipo (GUID, data, booleano, oggetto, ecc.).
      * @param {any} value
      * @param {string} columnName
-     * @returns {string} Markup HTML della cella
+     * @returns {string} Cell HTML markup
      */
     function formatCellHtml(value, columnName) {
         if (value === null || value === undefined) {
@@ -889,7 +889,7 @@
     }
 
     /**
-     * Esegue l'escape dei caratteri speciali HTML.
+     * Escapes special HTML characters.
      * @param {string} str
      * @returns {string}
      */
@@ -904,11 +904,11 @@
     }
 
     // =========================================================================
-    // 5. COSTRUZIONE COMPLETA DELLA GRIGLIA INTERATTIVA (Data Grid)
+    // 5. FULL DATA GRID CONSTRUCTION
     // =========================================================================
 
     /**
-     * Costruisce e gestisce l'intera istanza interattiva del Data Grid.
+     * Builds and manages the interactive Data Grid instance.
      * @param {HTMLElement} mountContainer
      * @param {object} tabularData
      * @param {HTMLElement} opblockElement
@@ -917,7 +917,7 @@
         const rawItems = tabularData.items || [];
         const columns = extractColumns(rawItems);
 
-        // Stato locale della tabella
+        // Local table state
         const gridState = {
             allRows: rawItems,
             filteredRows: [...rawItems],
@@ -935,23 +935,23 @@
 
         // Layout HTML complessivo
         wrapper.innerHTML = `
-            <!-- Toolbar Griglia (Ricerca, Colonne, Export) -->
+            <!-- Grid Toolbar (Search, Columns, Export) -->
             <div class="swagger-grid-toolbar">
                 <div class="swagger-grid-search-wrap">
                     <span class="swagger-grid-search-icon">🔍</span>
                     <input type="text" class="swagger-grid-search-input" placeholder="Filtra righe in tempo reale..." />
-                    <button type="button" class="swagger-grid-search-clear" title="Cancella ricerca">✕</button>
+                    <button type="button" class="swagger-grid-search-clear" title="Clear search">✕</button>
                 </div>
 
                 <div class="swagger-grid-tools">
-                    <button type="button" class="swagger-grid-btn btn-toggle-cols" title="Mostra o nascondi colonne">
+                    <button type="button" class="swagger-grid-btn btn-toggle-cols" title="Show or hide columns">
                         <span>👁️ Colonne</span>
                         <span class="cols-count-badge" style="font-size:10px; opacity:0.8;">(${columns.length})</span>
                     </button>
                     <button type="button" class="swagger-grid-btn btn-export-csv" title="Esporta le righe visualizzate in file CSV">
                         <span>📥 CSV</span>
                     </button>
-                    <button type="button" class="swagger-grid-btn btn-copy-grid" title="Copia righe come JSON negli appunti">
+                    <button type="button" class="swagger-grid-btn btn-copy-grid" title="Copy rows as JSON to clipboard">
                         <span>📋 Copia</span>
                     </button>
                 </div>
@@ -960,7 +960,7 @@
                 <div class="swagger-grid-columns-menu"></div>
             </div>
 
-            <!-- Area Scrollabile Tabella -->
+            <!-- Scrollable Table Area -->
             <div class="swagger-grid-scroll-pane">
                 <table class="swagger-grid-table">
                     <thead></thead>
@@ -989,7 +989,7 @@
         const footerCounter = wrapper.querySelector(".swagger-grid-row-counter");
         const footerPagination = wrapper.querySelector(".swagger-grid-pagination");
 
-        // Popola il menu a tendina delle colonne
+        // Populate columns dropdown
         function renderColumnsMenu() {
             colsMenu.innerHTML = "";
             columns.forEach((col) => {
@@ -1030,7 +1030,7 @@
             }
         });
 
-        // Ricerca full-text
+        // Full-text search
         searchInput.addEventListener("input", () => {
             gridState.searchQuery = searchInput.value.trim().toLowerCase();
             searchClearBtn.style.display = gridState.searchQuery ? "inline-block" : "none";
@@ -1142,7 +1142,7 @@
                 const emptyTr = document.createElement("tr");
                 emptyTr.innerHTML = `
                     <td colspan="${visibleList.length}" style="text-align: center; padding: 24px; color: var(--grid-text-muted); font-style: italic;">
-                        Nessun elemento corrispondente ai criteri di ricerca.
+                        No items match current search criteria.
                     </td>
                 `;
                 tbody.appendChild(emptyTr);
@@ -1259,10 +1259,13 @@
         exportCsvBtn.addEventListener("click", () => {
             const visibleList = columns.filter((col) => gridState.visibleColumns.has(col));
             const rows = gridState.filteredRows;
-            downloadCsv(visibleList, rows);
+            const opPath = opblockElement?.querySelector(".opblock-summary-path")?.getAttribute("data-path") ||
+                           opblockElement?.querySelector(".opblock-summary-path")?.textContent?.trim() || "";
+            const opMethod = opblockElement?.querySelector(".opblock-summary-method")?.textContent?.trim() || "";
+            downloadCsv(visibleList, rows, { path: opPath, method: opMethod });
         });
 
-        // Copia JSON filtrato negli appunti
+        // Copy filtered JSON to clipboard
         copyGridBtn.addEventListener("click", () => {
             navigator.clipboard.writeText(JSON.stringify(gridState.filteredRows, null, 2)).then(() => {
                 const oldText = copyGridBtn.innerHTML;
@@ -1271,7 +1274,7 @@
             });
         });
 
-        // Inizializzazione prima vista
+        // Initial view setup
         renderColumnsMenu();
         applyFilterAndSort();
     }
@@ -1308,7 +1311,7 @@
         overlay.querySelector(".btn-close-nested")?.addEventListener("click", closePopover);
         overlay.querySelector(".btn-copy-nested")?.addEventListener("click", () => {
             navigator.clipboard.writeText(formatted);
-            alert("Sotto-JSON copiato negli appunti!");
+            alert("Sub-JSON copied to clipboard!");
         });
 
         overlay.addEventListener("click", (e) => {
@@ -1330,13 +1333,13 @@
     // 7. GENERATORE ED ESPORTATORE CSV
     // =========================================================================
 
-    function downloadCsv(columns, rows) {
+    function downloadCsv(columns, rows, context) {
         const lines = [];
 
-        // Header CSV
+        // CSV Header
         lines.push(columns.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";"));
 
-        // Righe CSV
+        // CSV Rows
         rows.forEach((row) => {
             const line = columns.map((col) => {
                 const val = row[col];
@@ -1347,13 +1350,26 @@
             lines.push(line.join(";"));
         });
 
-        // Prefisso BOM per corretta visualizzazione di caratteri accentati in Excel
+        // UTF-8 BOM prefix for Excel compatibility
         const csvContent = "\uFEFF" + lines.join("\r\n");
         const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `swagger_export_${Date.now()}.csv`;
+
+        let fileName = `swagger_export_${Date.now()}.csv`;
+        if (CONFIG.GET_CSV_FILENAME && context) {
+            try {
+                const custom = CONFIG.GET_CSV_FILENAME(context.path, context.method);
+                if (custom && typeof custom === "string") {
+                    fileName = custom.endsWith(".csv") ? custom : `${custom}.csv`;
+                }
+            } catch (e) {
+                console.warn("[DataGrid] Error in custom getCsvFilename:", e);
+            }
+        }
+
+        a.download = fileName;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -1387,7 +1403,7 @@
     }
 
     /**
-     * Esegue il cambio pagina server-side aggiornando il parametro Swagger e cliccando Execute.
+     * Performs server-side page transition by updating Swagger parameter and clicking Execute.
      * @param {HTMLElement} opblock
      * @param {HTMLElement} gridWrapper
      * @param {number} targetPage
@@ -1395,16 +1411,16 @@
     function triggerServerPageChange(opblock, gridWrapper, targetPage) {
         if (!opblock || targetPage < 1) return;
 
-        // Mostra overlay di caricamento semi-trasparente sulla tabella
+        // Show semi-transparent loading overlay on table
         const loading = document.createElement("div");
         loading.className = "swagger-grid-loading-overlay";
         loading.innerHTML = `
             <div class="swagger-grid-spinner"></div>
-            <span>Caricamento Pagina ${targetPage}...</span>
+            <span>Loading Page ${targetPage}...</span>
         `;
         gridWrapper.appendChild(loading);
 
-        // 1. Cerca eventuale parametro di query/path 'Page' o 'pageIndex'
+        // 1. Look for 'Page' or 'pageIndex' query/path parameter
         const inputs = opblock.querySelectorAll(".parameters input, .opblock-body input");
         let pageInput = null;
 
@@ -1420,7 +1436,7 @@
             setReactInputValue(pageInput, targetPage);
         }
 
-        // 2. Per endpoint POST di ricerca (es. Leads/search o Candidate/Grid con SearchRequest<T>): aggiorna il body JSON
+        // 2. For POST search endpoints with request bodies: update JSON pagination properties
         const bodyTextarea = opblock.querySelector(".body-param__text, .body-param textarea, textarea.body-param");
         if (bodyTextarea && bodyTextarea.value) {
             try {
@@ -1456,10 +1472,10 @@
             }
         }
 
-        // Flag per mantenere attiva la vista tabella al prossimo render della risposta
+        // Flag to keep table view active on next response render
         opblock._keepTableViewActive = true;
 
-        // Clicca programmaticamente il pulsante Execute di Swagger UI
+        // Programmatically click Swagger UI Execute button
         setTimeout(() => {
             const executeBtn = opblock.querySelector(".btn.execute");
             if (executeBtn) {
@@ -1471,12 +1487,12 @@
     }
 
     // =========================================================================
-    // 9. MONTAGGIO TOGGLE E INTEGRAZIONE NELLE RISPOSTE SWAGGER
+    // 9. TOGGLE MOUNTING & SWAGGER RESPONSE INTEGRATION
     // =========================================================================
 
     /**
      * Verifica tassativamente che l'elemento appartenga a una RISPOSTA REALE del server
-     * (e NON alla documentazione degli esempi o allo schema OpenAPI).
+     * (and NOT the example documentation or OpenAPI schema).
      * @param {HTMLElement} responseCol
      * @returns {boolean}
      */
@@ -1493,7 +1509,7 @@
             return false;
         }
 
-        // 2. Verifica intestazione "Response body" (presente solo nelle risposte live eseguite)
+        // 2. Verify "Response body" header (present only in executed live responses)
         const headers = Array.from(responseCol.querySelectorAll("h5"));
         const hasResponseBodyHeader = headers.some(h => h.textContent.trim().toLowerCase().includes("response body"));
         if (hasResponseBodyHeader) {
@@ -1509,7 +1525,7 @@
             }
         }
 
-        // 4. Se l'opblock ha già eseguito una richiesta (presenza di .request-url)
+        // 4. If opblock has already executed a request (.request-url present)
         const opblock = responseCol.closest(".opblock");
         if (opblock && opblock.querySelector(".request-url")) {
             const inners = Array.from(opblock.querySelectorAll(".responses-inner"));
@@ -1562,7 +1578,7 @@
     function processResponseElement(responseCol) {
         if (!responseCol) return;
 
-        // Filtro di sicurezza: attiva il Data Grid SOLO sulle risposte reali del server
+        // Safety filter: activate Data Grid ONLY on real server responses
         if (!isLiveServerResponse(responseCol)) {
             const rogueContainer = responseCol.querySelector(".swagger-grid-container");
             if (rogueContainer) {
@@ -1571,10 +1587,10 @@
             return;
         }
 
-        // Trova l'opblock genitore
+        // Find parent opblock
         const opblock = responseCol.closest(".opblock");
 
-        // Estrae il JSON della risposta reale
+        // Extract real response JSON
         const extracted = extractLiveResponseJson(responseCol);
         if (!extracted || !extracted.parsed) return;
 
@@ -1605,7 +1621,7 @@
         // Memorizza l'ultimo payload processato
         responseCol._lastProcessedRawJson = rawText;
 
-        // Contenitore host per la tabella e il toggle
+        // Host container for table and toggle toolbar
         gridContainer = document.createElement("div");
         gridContainer.className = "swagger-grid-container";
 
@@ -1617,11 +1633,11 @@
         gridContainer.innerHTML = `
             <div class="swagger-grid-toggle-bar">
                 <div class="swagger-grid-toggle-group">
-                    <button type="button" class="swagger-grid-toggle-btn btn-view-json is-active" title="Visualizza formato JSON originale">
-                        <span>📄 Vista JSON</span>
+                    <button type="button" class="swagger-grid-toggle-btn btn-view-json is-active" title="View original JSON format">
+                        <span>📄 JSON View</span>
                     </button>
-                    <button type="button" class="swagger-grid-toggle-btn btn-view-table" title="Visualizza griglia tabellare interattiva">
-                        <span>📊 Vista Tabella</span>
+                    <button type="button" class="swagger-grid-toggle-btn btn-view-table" title="Display interactive table grid">
+                        <span>📊 Table View</span>
                         <span class="swagger-grid-badge">${itemsCount}</span>
                     </button>
                 </div>
@@ -1632,7 +1648,7 @@
             <div class="swagger-grid-content-mount"></div>
         `;
 
-        // Trova l'elemento ancora prima del quale inserire la toolbar e tabella
+        // Find anchor element to insert toolbar and table before
         const anchor = responseCol.querySelector(".custom-json-view, .response-controls, .highlight-code");
         if (anchor && anchor.parentNode) {
             anchor.parentNode.insertBefore(gridContainer, anchor);
@@ -1656,7 +1672,7 @@
         btnViewJson.addEventListener("click", () => setView(false));
         btnViewTable.addEventListener("click", () => setView(true));
 
-        // Se l'opblock ha il flag di mantenimento tabella attiva (dovuto a un cambio pagina)
+        // If opblock has flag to keep table view active (e.g. from page change)
         if (opblock && opblock._keepTableViewActive) {
             setView(true);
             opblock._keepTableViewActive = false;
@@ -1666,7 +1682,7 @@
     }
 
     /**
-     * Sincronizza la visibilità degli elementi JSON originali/custom rispetto alla vista attiva.
+     * Synchronizes visibility of original/custom JSON elements vs active view.
      * @param {HTMLElement} responseCol
      * @param {HTMLElement} gridContainer
      */
@@ -1676,7 +1692,7 @@
         const isTable = gridContainer.dataset.activeView === "table";
         const gridWrapper = gridContainer.querySelector(".swagger-grid-wrapper");
         const customView = responseCol.querySelector(".custom-json-view");
-        // Seleziona specificamente il blocco nativo Swagger, escludendo cloni presenti in customView
+        // Specifically select native Swagger block, excluding clones in customView
         const highlightCode = Array.from(responseCol.querySelectorAll(".highlight-code"))
             .find(el => !el.closest(".custom-json-view") && !el.closest(".swagger-grid-container"));
         const responseControls = responseCol.querySelector(".response-controls");
@@ -1686,16 +1702,16 @@
         }
 
         if (isTable) {
-            // In vista Tabella, nascondiamo sia il viewer formattato sia il pre nativo di Swagger
+            // In Table View, hide both pretty JSON viewer and Swagger native pre
             if (customView) customView.style.display = "none";
             if (highlightCode) highlightCode.style.display = "none";
             if (responseControls) responseControls.style.display = "none";
         } else {
-            // In vista JSON (default), ripristiniamo la vista JSON
+            // In JSON View (default), restore JSON view
             if (responseControls) responseControls.style.display = "";
             if (customView) {
                 customView.style.display = "";
-                // Assicura che l'eventuale copia originale dentro customView sia visibile e non collassata
+                // Ensure cloned original inside customView is visible and not collapsed
                 const clonedOriginal = customView.querySelector(".custom-json-view__original-swagger");
                 if (clonedOriginal) {
                     clonedOriginal.style.display = "";
@@ -1736,7 +1752,7 @@
     let isGuideRegistered = false;
 
     /**
-     * Pubblica i metadati e la documentazione del plugin nella guida interattiva dell'Activity Bar (ID 27).
+     * Publishes plugin metadata and documentation to interactive Activity Bar guide.
      */
     function registerGuideDocumentation() {
         if (isGuideRegistered) return;
@@ -1744,15 +1760,15 @@
             isGuideRegistered = true;
             window.SwaggerActivityBar.registerPluginGuide({
                 id: "data-grid-view",
-                name: "Data Grid & Table View (Liste)",
+                name: "Data Grid & Table View",
                 version: "1.0.0",
-                description: "Trasforma le risposte JSON tabulari o paginate in griglie interattive stile Excel con ordinamento, ricerca ed esportazione CSV.",
+                description: "Transforms tabular or paginated JSON responses into interactive Excel-like data grids with sorting, filtering, and CSV export.",
                 shortcuts: [
-                    "Toggle Tabella/JSON: Passa tra vista a griglia e albero JSON",
-                    "Click Header: Ordina la colonna crescente o decrescente",
-                    "Cerca nella Tabella: Filtra le righe visibili",
-                    "{...}: Ispeziona oggetti complessi in modale",
-                    "Esporta CSV: Scarica i dati per Excel"
+                    "Toggle Table/JSON: Switch between data grid and JSON view",
+                    "Click Header: Sort column ascending or descending",
+                    "Search Table: Filter visible rows in real time",
+                    "{...}: Inspect nested complex objects in modal",
+                    "Export CSV: Download dataset for Excel"
                 ],
                 iconHtml: `
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1763,15 +1779,15 @@
                     </svg>
                 `,
                 manual: `
-### Panoramica
-Quando un endpoint restituisce un array di elementi o un payload paginato (come \`Candidate/Grid\` o \`Result<PaginatedList<T>>\`), il plugin inietta un comodo toggle **Tabella / JSON**.
+### Overview
+When an endpoint returns a list of items or a paginated envelope, the plugin injects a convenient **Table View / JSON View** toggle.
 
-### Funzionalità della Griglia
-- **Ordinamento Interattivo**: clicca su qualsiasi colonna per riordinare i dati (testo, numeri, date o boolean).
-- **Filtro Istantaneo**: digita nella casella cerca per trovare record senza effettuare nuove chiamate di rete.
-- **Paginazione Live**: scegli il numero di elementi per pagina (10, 25, 50, 100) e sfoglia le pagine.
-- **Ispezione Sotto-Oggetti**: le colonne contenenti oggetti o array annidati presentano un chip \`{...}\` che apre un popup modale per esaminare il JSON parziale.
-- **Esportazione CSV**: scarica con un click l'intero dataset formattato in formato CSV per Microsoft Excel.
+### Grid Capabilities
+- **Interactive Sorting**: click any column header to sort data ascending or descending.
+- **Instant Search**: type in the search box to filter records in real time without additional network requests.
+- **Live Pagination**: select page size options and navigate pages with synchronized server or client pagination.
+- **Nested Object Inspection**: columns with nested objects or arrays display a \`{...}\` chip that opens a modal viewer.
+- **CSV Export**: download the dataset in CSV format with configurable filename generation.
 `
             });
         }

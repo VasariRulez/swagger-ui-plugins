@@ -42,16 +42,32 @@ app.UseSwaggerUI(c =>
 
 ## Configuration Reference
 
-The plugin behavior is governed by the internal `CONFIG` block in `swagger-network-history.js`:
+You can customize the plugin by declaring `window.SwaggerNetworkHistoryConfig` before loading the script:
+
+```html
+<script>
+  window.SwaggerNetworkHistoryConfig = {
+    maxEntries: 100,                     // Retain up to 100 entries in the circular buffer (default: 50)
+    storageKey: "my_network_history",    // Custom localStorage key (default: "swp_swagger_network_history")
+    drawerWidth: 520,                    // Drawer width in pixels (default: 480)
+    openOnError: true,                   // Automatically open drawer on HTTP >= 400 or network error (default: false)
+    fastThreshold: 400,                  // Latency < 400ms renders green badge (default: 500)
+    mediumThreshold: 1200,               // Latency 400-1200ms renders yellow badge (default: 1500)
+    excludePatterns: [/healthcheck/i]    // Additional RegExp patterns to exclude from history
+  };
+</script>
+<script src="/plugins/network-history/swagger-network-history.js"></script>
+```
 
 | Setting | Default | Description |
 | :--- | :--- | :--- |
-| `STORAGE_KEY` | `"swp_swagger_network_history"` | Key used in `localStorage` for persisting the circular buffer across sessions |
-| `MAX_HISTORY_ENTRIES` | `50` | Maximum number of intercepted calls retained in history |
-| `DRAWER_WIDTH_PX` | `480` | Width in pixels of the slide-out drawer |
-| `LATENCY_THRESHOLDS.FAST` | `500` ms | Latencies below this threshold display green pills |
-| `LATENCY_THRESHOLDS.MEDIUM`| `1500` ms | Latencies between fast and medium display orange pills; above display red pills |
-| `IGNORED_URL_PATTERNS` | `[ /\.js/i, /\.css/i, /swagger\.json/i, ... ]` | Asset types and endpoints excluded from logging |
+| `storageKey` | `"swp_swagger_network_history"` | Key used in `localStorage` for persisting the circular buffer across sessions |
+| `maxEntries` | `50` | Maximum number of intercepted calls retained in history |
+| `drawerWidth` | `480` | Width in pixels of the slide-out drawer |
+| `openOnError` | `false` | Automatically opens history drawer when a request fails or returns HTTP >= 400 |
+| `fastThreshold` | `500` ms | Latencies below this threshold display green pills |
+| `mediumThreshold`| `1500` ms | Latencies between fast and medium display orange pills; above display red pills |
+| `excludePatterns` | `[]` | Additional regex patterns to exclude from recording |
 
 ---
 
@@ -72,4 +88,4 @@ The plugin behavior is governed by the internal `CONFIG` block in `swagger-netwo
 2. The response container displays a performance badge with latency (e.g., `⚡ 124ms · 4.2 KB · 200 OK`).
 3. Click the Activity Bar network icon to open the history drawer.
 4. Click **Replay** on any previous request to restore parameters, focus the operation, and trigger execution.
-5. Click **Ripristina** (Restore) to populate parameters into the form without auto-executing.
+5. Click **Restore** to populate parameters into the form without auto-executing.
