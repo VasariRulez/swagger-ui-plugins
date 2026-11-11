@@ -118,6 +118,39 @@ Include the script tags after `swagger-ui-bundle.js`. See [examples/static-html/
 
 ---
 
+## Internationalization (i18n) & Runtime Language Switcher
+
+The entire suite features native internationalization with built-in support for:
+- 🇬🇧 **English (`en`)** - Default
+- 🇮🇹 **Italian (`it`)**
+
+### 🌐 Runtime Language Popover & Reset Option
+When using `swagger-activity-bar.js`, an interactive language button is pinned at the bottom left (`🌐 EN` / `🌐 IT` / `🌐 AUTO`). Clicking it opens a popover to:
+- Switch immediately between **English** and **Italian**.
+- **↺ Reset to Config (Auto)**: clears the `localStorage` override, allowing the individual configurations of each plugin (`userConfig.locale`, e.g. `SwaggerSignalRConfig.locale`, `SwaggerJwtConfig.locale`) and host defaults to resume precedence.
+
+### 💾 Persistence & Auto-detection
+Manual user selection is saved to `localStorage` (`"swp_swagger_i18n_locale"`) and remembered across browser sessions. In "Auto" mode, plugins automatically check their individual plugin configuration, `window.SwaggerI18nConfig`, or `<html lang="...">`.
+
+### ⚙️ Global Configuration & Custom Dictionaries
+Hosts can supply custom overrides or set the initial locale via `window.SwaggerI18nConfig`:
+
+```html
+<script>
+  window.SwaggerI18nConfig = {
+    locale: "it", // "en" | "it" (default: "en")
+    autoDetect: true,
+    messages: {
+      it: {
+        // Optional key overrides
+      }
+    }
+  };
+</script>
+```
+
+---
+
 ## Namespace & Customization
 
 All plugins follow the isolated `swp-` CSS class, DOM ID, and storage prefix standard (e.g., `swp-activity-bar`, `swp_swagger_network_history`), ensuring complete isolation from host application styles and third-party scripts.

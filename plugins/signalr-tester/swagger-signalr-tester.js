@@ -77,6 +77,133 @@
     };
 
     // =========================================================================
+    // 1.1 INTERNATIONALIZATION (i18n) ENGINE & DICTIONARIES
+    // =========================================================================
+    const I18N = {
+        en: {
+            activityBarTitle: "SignalR Live Hub Tester",
+            activityBarAria: "SignalR Tester",
+            drawerTitle: "SignalR Hub Tester Console",
+            closeDrawerTitle: "Close console (ESC)",
+            statusDisconnected: "DISCONNECTED",
+            statusConnecting: "CONNECTING...",
+            statusConnected: "CONNECTED",
+            statusReconnecting: "RECONNECTING...",
+            connectedTo: "Connected to: {url}",
+            sectionConn: "1. Hub Connection",
+            sectionConnToggle: "Click to expand / collapse",
+            hubPathLabel: "Hub Path (URL or Preset):",
+            selectHubPlaceholder: "-- Select a suggested or recent Hub --",
+            optgroupPredefined: "Predefined Hubs",
+            optgroupRecent: "My Recent / Custom Hubs",
+            tokenActive: "Active Token detected ✓",
+            tokenAnonymous: "No token (Anonymous)",
+            useAuthLabel: "Send active application Bearer Token",
+            connectBtn: "▶ Connect",
+            disconnectBtn: "⏹ Disconnect",
+            sectionInvoke: "2. Invoke Method (Client -> Hub)",
+            methodNamePlaceholder: "Method Name (e.g. JoinGroup, SendMessage)",
+            invokeBtn: "🚀 Invoke",
+            jsonArgsLabel: "JSON Arguments (Array, e.g. [\"value\"] or [{\"id\": \"...\"}]):",
+            sectionListen: "3. Event Listeners (Broadcasts)",
+            activeBadge: "{count} active",
+            newListenerPlaceholder: "Event name (e.g. ReceiveTestMessage)",
+            addListenerBtn: "+ Listen",
+            removeListenerTitle: "Remove listener",
+            sectionLog: "4. Real-Time Activity Log",
+            copyLogBtn: "📋 Copy",
+            clearLogBtn: "🗑 Clear",
+            emptyLog: "No events recorded. Connect to a Hub to begin.",
+            logCopied: "✓ Copied to clipboard!",
+            connectingMsg: "Connecting to {url}...",
+            connectedMsg: "Connection established (ID: {id})",
+            disconnectedMsg: "Disconnected from Hub",
+            reconnectingMsg: "Connection lost. Attempting reconnection...",
+            reconnectedMsg: "Reconnected successfully.",
+            errorTitle: "SignalR Error"
+        },
+        it: {
+            activityBarTitle: "SignalR Live Hub Tester",
+            activityBarAria: "SignalR Tester",
+            drawerTitle: "Console SignalR Hub Tester",
+            closeDrawerTitle: "Chiudi console (ESC)",
+            statusDisconnected: "DISCONNESSO",
+            statusConnecting: "CONNESSIONE...",
+            statusConnected: "CONNESSO",
+            statusReconnecting: "RICONNESSIONE...",
+            connectedTo: "Connesso a: {url}",
+            sectionConn: "1. Connessione all'Hub (Generica)",
+            sectionConnToggle: "Clicca per espandere / collassare",
+            hubPathLabel: "Percorso Hub (URL o Preset):",
+            selectHubPlaceholder: "-- Seleziona un Hub suggerito o recente --",
+            optgroupPredefined: "Hub Predefiniti",
+            optgroupRecent: "I Miei Hub Recenti / Custom",
+            tokenActive: "Token attivo rilevato ✓",
+            tokenAnonymous: "Nessun token (Anonimo)",
+            useAuthLabel: "Invia Bearer Token applicativo attivo",
+            connectBtn: "▶ Connetti",
+            disconnectBtn: "⏹ Disconnetti",
+            sectionInvoke: "2. Invocazione Metodi (Client -> Hub)",
+            methodNamePlaceholder: "Nome Metodo (es. JoinGroup, SendMessage)",
+            invokeBtn: "🚀 Invoca",
+            jsonArgsLabel: "Argomenti JSON (Array, es. [\"valore\"] o [{\"id\": \"...\"}]):",
+            sectionListen: "3. Eventi in Ascolto (Broadcast Ricevuti)",
+            activeBadge: "{count} attivi",
+            newListenerPlaceholder: "Nome evento (es. ReceiveTestMessage)",
+            addListenerBtn: "+ Ascolta",
+            removeListenerTitle: "Rimuovi ascolto",
+            sectionLog: "4. Log Eventi in Tempo Reale",
+            copyLogBtn: "📋 Copia",
+            clearLogBtn: "🗑 Pulisci",
+            emptyLog: "Nessun evento registrato. Connettiti a un Hub per iniziare.",
+            logCopied: "✓ Copiato negli appunti!",
+            connectingMsg: "Connessione in corso a {url}...",
+            connectedMsg: "Connessione stabilita (ID: {id})",
+            disconnectedMsg: "Disconnesso dall'Hub",
+            reconnectingMsg: "Connessione interrotta. Tentativo di riconnessione...",
+            reconnectedMsg: "Riconnessione completata con successo.",
+            errorTitle: "Errore SignalR"
+        }
+    };
+
+    /**
+     * Resolves the active language code.
+     * @returns {"en"|"it"}
+     */
+    function getActiveLocale() {
+        const stored = localStorage.getItem("swp_swagger_i18n_locale");
+        if (stored === "it" || stored === "en") return stored;
+        if (userConfig.locale === "it" || userConfig.locale === "en") return userConfig.locale;
+        if (window.SwaggerI18nConfig && (window.SwaggerI18nConfig.locale === "it" || window.SwaggerI18nConfig.locale === "en")) {
+            return window.SwaggerI18nConfig.locale;
+        }
+        if (window.SwaggerI18nConfig && window.SwaggerI18nConfig.autoDetect && typeof document !== "undefined") {
+            const docLang = (document.documentElement.lang || "").toLowerCase();
+            if (docLang.startsWith("it")) return "it";
+        }
+        return "en";
+    }
+
+    /**
+     * Translates a message key into current locale with parameter substitution and fallback.
+     */
+    function t(key, defaultText, params = {}) {
+        const locale = getActiveLocale();
+        const hostOverrides = (window.SwaggerI18nConfig && window.SwaggerI18nConfig.messages && window.SwaggerI18nConfig.messages[locale]) ||
+                              (userConfig.messages && userConfig.messages[locale]);
+        let str = (hostOverrides && hostOverrides[key]) ||
+                  (I18N[locale] && I18N[locale][key]) ||
+                  (I18N["en"] && I18N["en][key"]) ||
+                  defaultText;
+        if (params && typeof params === "object") {
+            for (const [k, v] of Object.entries(params)) {
+                str = str.replace(new RegExp(`\\{${k}\\}`, "g"), v);
+            }
+        }
+        return str;
+    }
+
+    // =========================================================================
     // 2. STATO RUNTIME IN-MEMORY
     // =========================================================================
     const state = {
@@ -472,10 +599,10 @@
         const currentVal = select.value;
         const recentHubs = loadRecentHubs();
 
-        let html = `<option value="">-- Seleziona un Hub suggerito o recente --</option>`;
+        let html = `<option value="">${t("selectHubPlaceholder", "-- Select a suggested or recent Hub --")}</option>`;
 
         // Gruppo 1: Predefiniti
-        html += `<optgroup label="Hub Predefiniti">`;
+        html += `<optgroup label="${t("optgroupPredefined", "Predefined Hubs")}">`;
         CONFIG.DEFAULT_HUB_PRESETS.forEach((preset) => {
             html += `<option value="${escapeHtml(preset.path)}">${escapeHtml(preset.label)} (${escapeHtml(preset.path)})</option>`;
         });
@@ -483,7 +610,7 @@
 
         // Gruppo 2: Recenti dell'utente (se presenti)
         if (recentHubs.length > 0) {
-            html += `<optgroup label="I Miei Hub Recenti / Custom">`;
+            html += `<optgroup label="${t("optgroupRecent", "My Recent / Custom Hubs")}">`;
             recentHubs.forEach((hubPath) => {
                 html += `<option value="${escapeHtml(hubPath)}">🔗 ${escapeHtml(hubPath)}</option>`;
             });
@@ -1069,7 +1196,8 @@
 
             window.SwaggerActivityBar.registerItem({
                 id: "signalr-tester",
-                title: "SignalR Live Hub Tester (Open / Close Console)",
+                title: t("activityBarTitle", "SignalR Live Hub Tester"),
+                ariaLabel: t("activityBarAria", "SignalR Tester"),
                 ariaLabel: "SignalR Live Hub Tester",
                 iconHtml: `
                     <span class="signalr-icon-wrap">
@@ -1156,31 +1284,31 @@
         });
 
         drawer.innerHTML = `
-            <div class="signalr-drawer-header">
+                        <div class="signalr-drawer-header">
                 <div class="signalr-header-title">
                     <span class="signalr-status-dot signalr-status-dot--disconnected"></span>
-                    <span>Console SignalR Hub Tester</span>
+                    <span class="swp-sig-title">${t("drawerTitle", "SignalR Hub Tester Console")}</span>
                 </div>
-                <button type="button" class="signalr-btn-close btn-close-drawer" title="Close console (ESC)">✕</button>
+                <button type="button" class="signalr-btn-close btn-close-drawer" title="${t("closeDrawerTitle", "Close console (ESC)")}">✕</button>
             </div>
 
             <div class="signalr-drawer-body">
                 <!-- Sezione 1: Configurazione Connessione (Collassabile) -->
                 <div class="signalr-section signalr-section--collapsible" id="signalr-sec-conn">
-                    <div class="signalr-section-header" data-toggle="signalr-sec-conn" title="Clicca per espandere / collassare">
+                    <div class="signalr-section-header" data-toggle="signalr-sec-conn" title="${t("sectionConnToggle", "Click to expand / collapse")}">
                         <div class="signalr-section-title-wrap">
                             <span class="signalr-collapse-icon">▼</span>
-                            <span>1. Connessione all'Hub (Generica)</span>
+                            <span class="swp-sig-sec-conn-title">${t("sectionConn", "1. Hub Connection")}</span>
                         </div>
                         <div style="display:flex; align-items:center; gap:6px;">
                             <span id="signalr-hub-active-chip" class="signalr-summary-chip" style="display:none; max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
-                            <span id="signalr-conn-status-badge" style="font-size:10px; font-weight:600; color:#94a3b8;">DISCONNESSO</span>
+                            <span id="signalr-conn-status-badge" style="font-size:10px; font-weight:600; color:#94a3b8;">${t("statusDisconnected", "DISCONNECTED")}</span>
                         </div>
                     </div>
 
                     <div class="signalr-section-content">
                         <div style="display:flex; flex-direction:column; gap:6px;">
-                            <label style="font-size:11px; font-weight:600;">Percorso Hub (URL o Preset):</label>
+                            <label class="swp-sig-hub-label" style="font-size:11px; font-weight:600;">${t("hubPathLabel", "Hub Path (URL or Preset):")}</label>
                             <select id="signalr-preset-select" class="signalr-select">
                                 ${presetOptions}
                             </select>
@@ -1190,17 +1318,17 @@
                         <div style="display:flex; align-items:center; justify-content:space-between; margin-top:4px;">
                             <label style="display:inline-flex; align-items:center; gap:6px; font-size:11px; cursor:pointer;">
                                 <input type="checkbox" id="signalr-use-auth-cb" checked />
-                                <span>Invia Bearer Token applicativo attivo</span>
+                                <span class="swp-sig-use-auth">${t("useAuthLabel", "Send active application Bearer Token")}</span>
                             </label>
-                            <span id="signalr-token-indicator" style="font-size:10px; color:#10b981; font-weight:600;">Token rilevato ✓</span>
+                            <span id="signalr-token-indicator" style="font-size:10px; color:#10b981; font-weight:600;">${t("tokenActive", "Active Token detected ✓")}</span>
                         </div>
 
                         <div style="display:flex; gap:8px; margin-top:6px;">
                             <button type="button" id="signalr-btn-connect" class="signalr-btn signalr-btn-primary" style="flex:1;">
-                                ▶ Connetti
+                                ${t("connectBtn", "▶ Connect")}
                             </button>
                             <button type="button" id="signalr-btn-disconnect" class="signalr-btn signalr-btn-danger" style="display:none; flex:1;">
-                                ⏹ Disconnetti
+                                ${t("disconnectBtn", "⏹ Disconnect")}
                             </button>
                         </div>
                     </div>
@@ -1208,10 +1336,10 @@
 
                 <!-- Sezione 2: Invocazione Metodi (Collassabile) -->
                 <div class="signalr-section signalr-section--collapsible" id="signalr-sec-invoke">
-                    <div class="signalr-section-header" data-toggle="signalr-sec-invoke" title="Clicca per espandere / collassare">
+                    <div class="signalr-section-header" data-toggle="signalr-sec-invoke" title="${t("sectionConnToggle", "Click to expand / collapse")}">
                         <div class="signalr-section-title-wrap">
                             <span class="signalr-collapse-icon">▼</span>
-                            <span>2. Invoke Method (Client -> Hub)</span>
+                            <span class="swp-sig-sec-invoke-title">${t("sectionInvoke", "2. Invoke Method (Client -> Hub)")}</span>
                         </div>
                         <span id="signalr-invoke-summary-badge" class="signalr-summary-chip" style="display:none;"></span>
                     </div>
@@ -1219,32 +1347,32 @@
                     <div class="signalr-section-content">
                         <div style="display:flex; flex-direction:column; gap:6px;">
                             <div style="display:flex; gap:6px;">
-                                <input id="signalr-method-name-input" class="signalr-input" type="text" placeholder="Method Name (e.g. JoinGroup, SendMessage)" style="flex:1;" />
+                                <input id="signalr-method-name-input" class="signalr-input" type="text" placeholder="${t("methodNamePlaceholder", "Method Name (e.g. JoinGroup, SendMessage)")}" style="flex:1;" />
                                 <button type="button" id="signalr-btn-invoke" class="signalr-btn signalr-btn-primary">
-                                    🚀 Invoca
+                                    ${t("invokeBtn", "🚀 Invoke")}
                                 </button>
                             </div>
-                            <label style="font-size:10px; color:var(--sig-text-muted);">Argomenti JSON (Array, es. ["valore"] o [{"id": "..."}]):</label>
-                            <textarea id="signalr-args-input" class="signalr-textarea" placeholder='["Argomento1", 123]'></textarea>
+                            <label class="swp-sig-json-args-label" style="font-size:10px; color:var(--sig-text-muted);">${t("jsonArgsLabel", 'JSON Arguments (Array, e.g. ["value"] or [{"id": "..."}]):')}</label>
+                            <textarea id="signalr-args-input" class="signalr-textarea" placeholder='["Arg1", 123]'></textarea>
                         </div>
                     </div>
                 </div>
 
                 <!-- Sezione 3: Event Listeners (Collassabile) -->
                 <div class="signalr-section signalr-section--collapsible" id="signalr-sec-listen">
-                    <div class="signalr-section-header" data-toggle="signalr-sec-listen" title="Clicca per espandere / collassare">
+                    <div class="signalr-section-header" data-toggle="signalr-sec-listen" title="${t("sectionConnToggle", "Click to expand / collapse")}">
                         <div class="signalr-section-title-wrap">
                             <span class="signalr-collapse-icon">▼</span>
-                            <span>3. Eventi in Ascolto (Broadcast Ricevuti)</span>
+                            <span class="swp-sig-sec-listen-title">${t("sectionListen", "3. Event Listeners (Broadcasts)")}</span>
                         </div>
-                        <span id="signalr-listeners-summary-badge" class="signalr-summary-chip">${state.activeListeners.size} attivi</span>
+                        <span id="signalr-listeners-summary-badge" class="signalr-summary-chip">${t("activeBadge", "{count} active", { count: state.activeListeners.size })}</span>
                     </div>
 
                     <div class="signalr-section-content">
                         <div style="display:flex; gap:6px;">
-                            <input id="signalr-new-listener-input" class="signalr-input" type="text" placeholder="Nome evento (es. ReceiveTestMessage)" style="flex:1;" />
+                            <input id="signalr-new-listener-input" class="signalr-input" type="text" placeholder="${t("newListenerPlaceholder", "Event name (e.g. ReceiveTestMessage)")}" style="flex:1;" />
                             <button type="button" id="signalr-btn-add-listener" class="signalr-btn">
-                                + Ascolta
+                                ${t("addListenerBtn", "+ Listen")}
                             </button>
                         </div>
 
@@ -1257,15 +1385,15 @@
                 <!-- Section 4: Real-Time Activity Log -->
                 <div class="signalr-section signalr-section--log">
                     <div class="signalr-section-title">
-                        <span>4. Log Eventi in Tempo Reale</span>
+                        <span class="swp-sig-sec-log-title">${t("sectionLog", "4. Real-Time Activity Log")}</span>
                         <div style="display:flex; gap:6px;">
-                            <button type="button" id="signalr-btn-copy-log" class="signalr-btn" style="height:22px; padding:0 6px; font-size:10px;">📋 Copia</button>
-                            <button type="button" id="signalr-btn-clear-log" class="signalr-btn" style="height:22px; padding:0 6px; font-size:10px;">🗑 Pulisci</button>
+                            <button type="button" id="signalr-btn-copy-log" class="signalr-btn" style="height:22px; padding:0 6px; font-size:10px;">${t("copyLogBtn", "📋 Copy")}</button>
+                            <button type="button" id="signalr-btn-clear-log" class="signalr-btn" style="height:22px; padding:0 6px; font-size:10px;">${t("clearLogBtn", "🗑 Clear")}</button>
                         </div>
                     </div>
 
                     <div id="signalr-log-stream" class="signalr-log-stream">
-                        <div class="signalr-log-empty">No events recorded. Connect to a Hub to begin.</div>
+                        <div class="signalr-log-empty">${t("emptyLog", "No events recorded. Connect to a Hub to begin.")}</div>
                     </div>
                 </div>
             </div>
@@ -1448,12 +1576,15 @@
         const statusBadge = document.getElementById("signalr-conn-status-badge");
         const hubChip = document.getElementById("signalr-hub-active-chip");
         if (statusBadge) {
-            statusBadge.textContent = newStatus.toUpperCase();
+            const statusKey = newStatus === "connected" ? "statusConnected" :
+                              newStatus === "connecting" ? "statusConnecting" :
+                              newStatus === "reconnecting" ? "statusReconnecting" : "statusDisconnected";
+            statusBadge.textContent = t(statusKey, newStatus.toUpperCase());
             if (newStatus === "connected") {
                 statusBadge.style.color = "#10b981";
                 if (hubChip && state.currentHubUrl) {
                     hubChip.textContent = state.currentHubUrl;
-                    hubChip.title = `Connesso a: ${state.currentHubUrl}`;
+                    hubChip.title = t("connectedTo", `Connected to: ${state.currentHubUrl}`, { url: state.currentHubUrl });
                     hubChip.style.display = "inline-block";
                 }
             } else if (newStatus === "connecting" || newStatus === "reconnecting") {
@@ -1488,10 +1619,10 @@
         const indicator = document.getElementById("signalr-token-indicator");
         if (indicator) {
             if (token) {
-                indicator.textContent = "Token attivo rilevato ✓";
+                indicator.textContent = t("tokenActive", "Active Token detected ✓");
                 indicator.style.color = "#10b981";
             } else {
-                indicator.textContent = "No token (Anonymous)";
+                indicator.textContent = t("tokenAnonymous", "No token (Anonymous)");
                 indicator.style.color = "#f59e0b";
             }
         }
@@ -1508,7 +1639,7 @@
 
         const listenersBadge = document.getElementById("signalr-listeners-summary-badge");
         if (listenersBadge) {
-            listenersBadge.textContent = `${state.activeListeners.size} attivi`;
+            listenersBadge.textContent = t("activeBadge", `${state.activeListeners.size} active`, { count: state.activeListeners.size });
         }
 
         state.activeListeners.forEach((name) => {
@@ -1516,7 +1647,7 @@
             tag.className = "signalr-tag";
             tag.innerHTML = `
                 <span>${escapeHtml(name)}</span>
-                <span class="signalr-tag-del" title="Rimuovi ascolto">✕</span>
+                <span class="signalr-tag-del" title="${t("removeListenerTitle", "Remove listener")}">✕</span>
             `;
 
             tag.querySelector(".signalr-tag-del")?.addEventListener("click", () => {
@@ -1590,6 +1721,61 @@
 
                 registerGuideDocumentation();
 
+        // Listen to i18n locale changes
+        window.addEventListener("swagger-i18n:locale-changed", () => {
+            registerGuideDocumentation(true);
+            populateHubDropdown();
+            updateTokenIndicator();
+            renderListenersList();
+            updateStatusBadge(state.status);
+
+            const drawer = document.getElementById(CONFIG.ELEMENT_IDS.DRAWER);
+            if (drawer) {
+                const title = drawer.querySelector(".swp-sig-title");
+                if (title) title.textContent = t("drawerTitle", "SignalR Hub Tester Console");
+                const closeBtn = drawer.querySelector(".btn-close-drawer");
+                if (closeBtn) closeBtn.title = t("closeDrawerTitle", "Close console (ESC)");
+                const secConnTitle = drawer.querySelector(".swp-sig-sec-conn-title");
+                if (secConnTitle) secConnTitle.textContent = t("sectionConn", "1. Hub Connection");
+                const hubLabel = drawer.querySelector(".swp-sig-hub-label");
+                if (hubLabel) hubLabel.textContent = t("hubPathLabel", "Hub Path (URL or Preset):");
+                const useAuth = drawer.querySelector(".swp-sig-use-auth");
+                if (useAuth) useAuth.textContent = t("useAuthLabel", "Send active application Bearer Token");
+                const btnConnect = drawer.querySelector("#signalr-btn-connect");
+                if (btnConnect) btnConnect.textContent = t("connectBtn", "▶ Connect");
+                const btnDisconnect = drawer.querySelector("#signalr-btn-disconnect");
+                if (btnDisconnect) btnDisconnect.textContent = t("disconnectBtn", "⏹ Disconnect");
+                const secInvokeTitle = drawer.querySelector(".swp-sig-sec-invoke-title");
+                if (secInvokeTitle) secInvokeTitle.textContent = t("sectionInvoke", "2. Invoke Method (Client -> Hub)");
+                const methodInput = drawer.querySelector("#signalr-method-name-input");
+                if (methodInput) methodInput.placeholder = t("methodNamePlaceholder", "Method Name (e.g. JoinGroup, SendMessage)");
+                const btnInvoke = drawer.querySelector("#signalr-btn-invoke");
+                if (btnInvoke) btnInvoke.textContent = t("invokeBtn", "🚀 Invoke");
+                const jsonArgs = drawer.querySelector(".swp-sig-json-args-label");
+                if (jsonArgs) jsonArgs.textContent = t("jsonArgsLabel", 'JSON Arguments (Array, e.g. ["value"] or [{"id": "..."}]):');
+                const secListenTitle = drawer.querySelector(".swp-sig-sec-listen-title");
+                if (secListenTitle) secListenTitle.textContent = t("sectionListen", "3. Event Listeners (Broadcasts)");
+                const newListenerInput = drawer.querySelector("#signalr-new-listener-input");
+                if (newListenerInput) newListenerInput.placeholder = t("newListenerPlaceholder", "Event name (e.g. ReceiveTestMessage)");
+                const btnAddListener = drawer.querySelector("#signalr-btn-add-listener");
+                if (btnAddListener) btnAddListener.textContent = t("addListenerBtn", "+ Listen");
+                const secLogTitle = drawer.querySelector(".swp-sig-sec-log-title");
+                if (secLogTitle) secLogTitle.textContent = t("sectionLog", "4. Real-Time Activity Log");
+                const btnCopyLog = drawer.querySelector("#signalr-btn-copy-log");
+                if (btnCopyLog) btnCopyLog.textContent = t("copyLogBtn", "📋 Copy");
+                const btnClearLog = drawer.querySelector("#signalr-btn-clear-log");
+                if (btnClearLog) btnClearLog.textContent = t("clearLogBtn", "🗑 Clear");
+                const emptyLog = drawer.querySelector(".signalr-log-empty");
+                if (emptyLog) emptyLog.textContent = t("emptyLog", "No events recorded. Connect to a Hub to begin.");
+            }
+
+            if (window.SwaggerActivityBar && typeof window.SwaggerActivityBar.updateItem === "function") {
+                window.SwaggerActivityBar.updateItem("signalr-tester", {
+                    title: t("activityBarTitle", "SignalR Live Hub Tester")
+                });
+            }
+        });
+
                 // Observer per mantenere il trigger (Activity Bar o Fallback) in caso di re-render
                 const observer = new MutationObserver(() => {
                     const hasActivityBarItem = window.SwaggerActivityBar && window.SwaggerActivityBar.getItemElement("signalr-tester");
@@ -1614,8 +1800,8 @@
     /**
      * Publishes plugin metadata and documentation to interactive Activity Bar guide.
      */
-    function registerGuideDocumentation() {
-        if (isGuideRegistered) return;
+    function registerGuideDocumentation(force = false) {
+        if (isGuideRegistered && !force) return;
         if (window.SwaggerActivityBar && typeof window.SwaggerActivityBar.registerPluginGuide === "function") {
             isGuideRegistered = true;
             window.SwaggerActivityBar.registerPluginGuide({
@@ -1637,7 +1823,16 @@
                         <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
                     </svg>
                 `,
-                manual: `
+                i18n: {
+                    en: {
+                        name: "SignalR Live Hub Tester",
+                        description: "Interactive debugging studio to connect to any SignalR Hub, invoke backend methods in real time, and monitor broadcast events.",
+                        shortcuts: [
+                            "Esc: Close slide-out drawer",
+                            "Click Section Header: Collapse or expand configuration boxes",
+                            "Copy Logs: Export event log history"
+                        ],
+                        manual: `
 ### Overview
 The SignalR console allows testing bidirectional real-time WebSocket communication directly inside Swagger UI without external tools.
 
@@ -1650,6 +1845,30 @@ The SignalR console allows testing bidirectional real-time WebSocket communicati
 - **Broadcast Listeners**: register custom event names to inspect messages broadcasted by the server.
 - **Side-by-Side Workflow**: the console drawer offsets Swagger UI content (\`padding-right: 480px\`), enabling simultaneous REST endpoint execution and SignalR event observation.
 `
+                    },
+                    it: {
+                        name: "SignalR Live Hub Tester",
+                        description: "Studio interattivo di collaudo per connettersi a qualsiasi Hub SignalR, invocare metodi server in tempo reale e monitorare eventi di broadcast.",
+                        shortcuts: [
+                            "Esc: Chiude la console laterale",
+                            "Click Intestazione Sezione: Collassa o espande i box di configurazione",
+                            "Copia Log: Esporta lo storico eventi negli appunti"
+                        ],
+                        manual: `
+### Panoramica
+La console SignalR permette di testare la comunicazione bidirezionale WebSocket in tempo reale direttamente dentro Swagger UI senza l'ausilio di tool esterni.
+
+### Connessione all'Hub
+- **Rotte Hub Flessibili**: connettiti a qualsiasi endpoint Hub relativo (es. \`/hubs/notifications\`, \`/hubs/chat\`) o seleziona dai preset suggeriti.
+- **Autenticazione Trasparente**: inietta automaticamente il Bearer Token attivo sia via \`accessTokenFactory\` che tramite query string \`?access_token=...\`.
+
+### Funzionalità della Console
+- **Invoca Metodi Server**: esegui chiamate verso l'Hub con argomenti JSON tracciando la latenza di andata e ritorno in millisecondi.
+- **Listener di Broadcast**: sottoscrivi eventi custom per ispezionare istantaneamente i payload inviati dal server.
+- **Flusso Affiancato**: il cassetto laterale ridimensiona Swagger UI (\`padding-right: 480px\`), permettendo di eseguire contemporaneamente endpoint REST e osservare eventi push SignalR.
+`
+                    }
+                }
             });
         }
     }

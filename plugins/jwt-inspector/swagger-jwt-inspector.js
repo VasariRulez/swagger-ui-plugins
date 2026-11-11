@@ -71,26 +71,127 @@
      * Standard and custom claims mapping highlighted in the modal summary table.
      * Struttura: { label: string, extract: (payload) => string[] | string | null }
      */
+    // =========================================================================
+    // 1.1 INTERNATIONALIZATION (i18n) ENGINE & DICTIONARIES
+    // =========================================================================
+    const I18N = {
+        en: {
+            statusBarTitle: "Click to open JWT Claims Inspector",
+            unauthenticated: "🔒 JWT: Not authenticated",
+            inspectPill: "🔍 Inspect",
+            modalTitle: "JWT Claims Inspector",
+            closeModal: "Close",
+            tabBearer: "Application Bearer Token",
+            tabMsal: "Microsoft Entra ID (MSAL)",
+            tabEmpty: "(Empty)",
+            summaryTitle: "Key Parameters Summary",
+            payloadTitle: "Full Decoded JSON Payload",
+            noTokenNotice: "No token present for this session.",
+            copyTokenBtn: "📋 Copy JWT Token (Raw)",
+            copyPayloadBtn: "📄 Copy Payload JSON",
+            openDebuggerBtn: "🔗 Open in {debugger}",
+            copiedFeedback: "✓ Copied!",
+            claimUser: "User / Name",
+            claimEmail: "Email",
+            claimRoles: "Assigned Roles",
+            claimUserId: "User ID (nameidentifier / sub)",
+            claimIssuer: "Issuer (iss)",
+            claimAudience: "Audience (aud)",
+            claimExpiration: "Expiration (exp)",
+            claimIssuedAt: "Issued At (iat)",
+            claimTenant: "Tenant ID (tid / tenant)",
+            noSpecificRole: "No specific role",
+            expired: "Expired",
+            expiresIn: "Expires in {time}"
+        },
+        it: {
+            statusBarTitle: "Clicca per aprire il JWT Claims Inspector dettagliato",
+            unauthenticated: "🔒 JWT: Non autenticato",
+            inspectPill: "🔍 Ispeziona",
+            modalTitle: "JWT Claims Inspector",
+            closeModal: "Chiudi",
+            tabBearer: "Bearer Token Applicativo",
+            tabMsal: "Microsoft Entra ID (MSAL)",
+            tabEmpty: "(Vuoto)",
+            summaryTitle: "Riepilogo Parametri Chiave",
+            payloadTitle: "Payload JSON Completo",
+            noTokenNotice: "Nessun token presente per questa sessione.",
+            copyTokenBtn: "📋 Copia JWT Token (Raw)",
+            copyPayloadBtn: "📄 Copia Payload JSON",
+            openDebuggerBtn: "🔗 Apri in {debugger}",
+            copiedFeedback: "✓ Copiato!",
+            claimUser: "Utente / Nome",
+            claimEmail: "Email",
+            claimRoles: "Ruoli Assegnati",
+            claimUserId: "User ID (nameidentifier / sub)",
+            claimIssuer: "Issuer (iss)",
+            claimAudience: "Audience (aud)",
+            claimExpiration: "Scadenza (exp)",
+            claimIssuedAt: "Emesso il (iat)",
+            claimTenant: "Tenant ID (tid / tenant)",
+            noSpecificRole: "Nessun ruolo specifico",
+            expired: "Scaduto",
+            expiresIn: "Scade tra {time}"
+        }
+    };
+
+    /**
+     * Resolves the active language code.
+     * @returns {"en"|"it"}
+     */
+    function getActiveLocale() {
+        const stored = localStorage.getItem("swp_swagger_i18n_locale");
+        if (stored === "it" || stored === "en") return stored;
+        if (userConfig.locale === "it" || userConfig.locale === "en") return userConfig.locale;
+        if (window.SwaggerI18nConfig && (window.SwaggerI18nConfig.locale === "it" || window.SwaggerI18nConfig.locale === "en")) {
+            return window.SwaggerI18nConfig.locale;
+        }
+        if (window.SwaggerI18nConfig && window.SwaggerI18nConfig.autoDetect && typeof document !== "undefined") {
+            const docLang = (document.documentElement.lang || "").toLowerCase();
+            if (docLang.startsWith("it")) return "it";
+        }
+        return "en";
+    }
+
+    /**
+     * Translates a message key into current locale with parameter substitution and fallback.
+     */
+    function t(key, defaultText, params = {}) {
+        const locale = getActiveLocale();
+        const hostOverrides = (window.SwaggerI18nConfig && window.SwaggerI18nConfig.messages && window.SwaggerI18nConfig.messages[locale]) ||
+                              (userConfig.messages && userConfig.messages[locale]);
+        let str = (hostOverrides && hostOverrides[key]) ||
+                  (I18N[locale] && I18N[locale][key]) ||
+                  (I18N["en"] && I18N["en"][key]) ||
+                  defaultText;
+        if (params && typeof params === "object") {
+            for (const [k, v] of Object.entries(params)) {
+                str = str.replace(new RegExp(`\\{${k}\\}`, "g"), v);
+            }
+        }
+        return str;
+    }
+
     const SUMMARY_CLAIMS_MAPPING = [
         {
-            label: "Utente / Nome",
+            claimKey: "claimUser", label: "User / Name",
             extract: (p) => extractUserName(p)
         },
         {
-            label: "Email",
+            claimKey: "claimEmail", label: "Email",
             extract: (p) => extractUserEmail(p)
         },
         {
-            label: "Ruoli Assegnati",
+            claimKey: "claimRoles", label: "Assigned Roles",
             extract: (p) => {
                 const roles = extractUserRoles(p);
                 if (Array.isArray(roles)) return roles.join(", ");
                 if (typeof roles === "string") return roles;
-                return "No specific role";
+                return t("noSpecificRole", "No specific role");
             }
         },
         {
-            label: "User ID (nameidentifier / sub)",
+            claimKey: "claimUserId", label: "User ID (nameidentifier / sub)",
             extract: (p) =>
                 p["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"] ||
                 p.sub ||
@@ -98,11 +199,11 @@
                 null
         },
         {
-            label: "Audience (aud)",
+            claimKey: "claimAudience", label: "Audience (aud)",
             extract: (p) => (Array.isArray(p.aud) ? p.aud.join(", ") : p.aud) || null
         },
         {
-            label: "Issuer (iss)",
+            claimKey: "claimIssuer", label: "Issuer (iss)",
             extract: (p) => p.iss || null
         },
         {
@@ -110,7 +211,7 @@
             extract: (p) => p.permissions_mask || null
         },
         {
-            label: "Emesso il (iat)",
+            claimKey: "claimIssuedAt", label: "Issued At (iat)",
             extract: (p) => (p.iat ? formatTimestamp(p.iat * 1000) : null)
         },
         {
@@ -235,7 +336,7 @@
         if (!text) return;
 
         navigator.clipboard.writeText(text).then(() => {
-            buttonElement.textContent = "✓ Copied!";
+            buttonElement.textContent = t("copiedFeedback", "✓ Copied!");
             buttonElement.classList.add("jwt-btn--copied");
 
             setTimeout(() => {
@@ -721,7 +822,7 @@
 
             statusBar = document.createElement("div");
             statusBar.id = CONFIG.STATUS_BAR_ELEMENT_ID;
-            statusBar.title = "Clicca per aprire il JWT Claims Inspector dettagliato";
+            statusBar.title = t("statusBarTitle", "Click to open JWT Claims Inspector");
             statusBar.addEventListener("click", openInspectorModal);
 
             topbarWrapper.appendChild(statusBar);
@@ -733,7 +834,7 @@
         if (!currentPayload) {
             statusBar.innerHTML = `
                 <span class="jwt-status-indicator jwt-indicator--unauth"></span>
-                <span class="jwt-status-badge">🔒 JWT: Non autenticato</span>
+                <span class="jwt-status-badge">${t("unauthenticated", "🔒 JWT: Not authenticated")}</span>
             `;
             return;
         }
@@ -752,7 +853,7 @@
             <span class="jwt-status-indicator ${indicatorClass}"></span>
             <span class="jwt-status-badge">👤 ${escapeHtml(userName)}${roleLabel ? ` [${escapeHtml(roleLabel)}]` : ""}</span>
             <span class="jwt-status-pill ${pillClass}">⏳ ${expCountdown.text}</span>
-            <span style="opacity: 0.7; font-size: 11px;">🔍 Ispeziona</span>
+            <span style="opacity: 0.7; font-size: 11px;">${t("inspectPill", "🔍 Inspect")}</span>
         `;
     }
 
@@ -835,7 +936,7 @@
                 if (val !== null && val !== undefined) {
                     tableRowsHtml += `
                         <tr>
-                            <td class="jwt-claim-label">${escapeHtml(claimDef.label)}</td>
+                            <td class="jwt-claim-label">${escapeHtml(claimDef.claimKey ? t(claimDef.claimKey, claimDef.label) : claimDef.label)}</td>
                             <td class="jwt-claim-value">${escapeHtml(String(val))}</td>
                         </tr>
                     `;
@@ -845,7 +946,7 @@
             tableRowsHtml = `
                 <tr>
                     <td colspan="2" class="jwt-empty-notice">
-                        No token present for this session.
+                        ${t("noTokenNotice", "No token present for this session.")}
                     </td>
                 </tr>
             `;
@@ -856,24 +957,24 @@
         cardElement.innerHTML = `
             <div class="jwt-modal-header">
                 <h3 class="jwt-modal-title">
-                    <span>🪪</span> JWT Claims Inspector
+                    <span>🪪</span> ${t("modalTitle", "JWT Claims Inspector")}
                 </h3>
-                <button type="button" class="jwt-modal-close-btn" id="jwt-modal-btn-close" title="Close">✕</button>
+                <button type="button" class="jwt-modal-close-btn" id="jwt-modal-btn-close" title="${t("closeModal", "Close")}">✕</button>
             </div>
 
             <div class="jwt-modal-tabs">
                 <button type="button" class="jwt-tab-btn ${selectedInspectorTab === "bearer" ? "jwt-tab-btn--active" : ""}" id="jwt-tab-bearer">
-                    Bearer Token Applicativo ${hasBearer ? "✓" : "(Vuoto)"}
+                    ${t("tabBearer", "Application Bearer Token")} ${hasBearer ? "✓" : t("tabEmpty", "(Empty)")}
                 </button>
                 <button type="button" class="jwt-tab-btn ${selectedInspectorTab === "msal" ? "jwt-tab-btn--active" : ""}" id="jwt-tab-msal">
-                    Microsoft Entra ID (MSAL) ${hasMsal ? "✓" : "(Vuoto)"}
+                    ${t("tabMsal", "Microsoft Entra ID (MSAL)")} ${hasMsal ? "✓" : t("tabEmpty", "(Empty)")}
                 </button>
             </div>
 
             <div class="jwt-modal-body">
                 <div>
                     <h4 class="jwt-section-title">
-                        Riepilogo Parametri Chiave
+                        ${t("summaryTitle", "Key Parameters Summary")}
                     </h4>
                     <table class="jwt-summary-table">
                         <tbody>
@@ -884,7 +985,7 @@
 
                 <div>
                     <h4 class="jwt-section-title">
-                        Payload JSON Completo
+                        ${t("payloadTitle", "Full Decoded JSON Payload")}
                     </h4>
                     <pre class="jwt-payload-viewer">${escapeHtml(formattedJson)}</pre>
                 </div>
@@ -892,14 +993,14 @@
 
             <div class="jwt-modal-footer">
                 <button type="button" class="jwt-action-btn" id="jwt-btn-copy-token" ${!currentToken ? "disabled" : ""}>
-                    📋 Copy JWT Token (Raw)
+                    ${t("copyTokenBtn", "📋 Copy JWT Token (Raw)")}
                 </button>
                 <button type="button" class="jwt-action-btn" id="jwt-btn-copy-payload" ${!currentPayload ? "disabled" : ""}>
-                    📄 Copy Payload JSON
+                    ${t("copyPayloadBtn", "📄 Copy Payload JSON")}
                 </button>
                 ${currentToken ? `
                     <a href="${CONFIG.EXTERNAL_DEBUGGER === 'jwt.io' ? `https://jwt.io/?token=${encodeURIComponent(currentToken)}` : `https://jwt.ms/#access_token=${encodeURIComponent(currentToken)}`}" target="_blank" rel="noopener noreferrer" class="jwt-action-btn jwt-action-btn-debugger" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
-                        🔗 Open in ${CONFIG.EXTERNAL_DEBUGGER}
+                        ${t("openDebuggerBtn", `🔗 Open in ${CONFIG.EXTERNAL_DEBUGGER}`, { debugger: CONFIG.EXTERNAL_DEBUGGER })}
                     </a>
                 ` : ""}
             </div>
@@ -1075,6 +1176,15 @@
 
                     registerGuideDocumentation();
                     window.addEventListener("swagger-activity-bar:ready", registerGuideDocumentation);
+                    window.addEventListener("swagger-i18n:locale-changed", () => {
+                        registerGuideDocumentation(true);
+                        renderStatusBar();
+                        const modal = document.getElementById(CONFIG.MODAL_ELEMENT_ID);
+                        if (modal) {
+                            const card = modal.querySelector(".jwt-modal-card");
+                            if (card) updateModalContent(card);
+                        }
+                    });
 
                     console.info("[Swagger JWT Inspector] Inizializzato con successo.");
                     return;
@@ -1094,8 +1204,8 @@
     /**
      * Publishes plugin metadata and documentation to interactive Activity Bar guide.
      */
-    function registerGuideDocumentation() {
-        if (isGuideRegistered) return;
+    function registerGuideDocumentation(force = false) {
+        if (isGuideRegistered && !force) return;
         if (window.SwaggerActivityBar && typeof window.SwaggerActivityBar.registerPluginGuide === "function") {
             isGuideRegistered = true;
             window.SwaggerActivityBar.registerPluginGuide({
@@ -1114,7 +1224,16 @@
                         <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
                     </svg>
                 `,
-                manual: `
+                i18n: {
+                    en: {
+                        name: "JWT Claims & Token Inspector",
+                        description: "Decodes active JWT tokens (Bearer and MSAL) in real time with expiration countdown, roles, and claims inspection.",
+                        shortcuts: [
+                            "Status Bar: Displays user, roles, and remaining token lifetime",
+                            "Inspect Claims: Opens detailed modal with claims breakdown",
+                            "Copy Token: Copies raw Bearer token string to clipboard"
+                        ],
+                        manual: `
 ### Overview
 Provides complete transparency into authenticated user identity and token lifecycle in Swagger UI (supporting both Microsoft Entra ID and application Bearer tokens).
 
@@ -1129,6 +1248,32 @@ Clicking **"Inspect Claims"** opens the inspector modal:
 - **Formatted JSON View**: inspect full decoded payload.
 - **External Debugger**: 1-click launch in jwt.ms or jwt.io.
 `
+                    },
+                    it: {
+                        name: "JWT Claims & Token Inspector",
+                        description: "Decodifica i token JWT attivi (Bearer e MSAL) in tempo reale con countdown di scadenza, ruoli e ispezione claims.",
+                        shortcuts: [
+                            "Status Bar: Mostra utente, ruoli e durata residua del token",
+                            "Ispeziona Claims: Apre la modale dettagliata con la suddivisione dei parametri",
+                            "Copia Token: Copia il token Bearer raw negli appunti"
+                        ],
+                        manual: `
+### Panoramica
+Offre totale trasparenza sull'identità dell'utente autenticato e sul ciclo di vita dei token in Swagger UI (supportando sia Microsoft Entra ID che token Bearer applicativi).
+
+### Status Bar
+Compare automaticamente nell'header alla presenza di un token valido:
+- **Identità & Ruoli**: visualizza nome utente e ruoli RBAC principali.
+- **Countdown Scadenza**: timer in tempo reale con warning visivo colorato all'approssimarsi della scadenza.
+
+### Modale Ispezione Claims
+Cliccando **"Ispeziona"** si apre la modale di dettaglio:
+- **Tabella Parametri**: decodifica le claim standard e proprietarie (\`sub\`, \`iss\`, \`aud\`, \`exp\`, \`roles\`, \`tenant\`).
+- **Visualizzatore JSON Formattato**: permette di visualizzare il payload grezzo decodificato con sintassi chiara.
+- **Debugger Esterno**: pulsante con link diretto per aprire il token in jwt.ms o jwt.io.
+`
+                    }
+                }
             });
         }
     }

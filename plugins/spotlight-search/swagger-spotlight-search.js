@@ -85,6 +85,65 @@
         }
     };
 
+    // =========================================================================
+    // 1.1 INTERNATIONALIZATION (i18n) ENGINE & LOCALES
+    // =========================================================================
+    const I18N = {
+        en: {
+            placeholder: "Search endpoints by path, method, tag or summary... (e.g. /users, post, chat, dev)",
+            close: "Close",
+            navigate: "Navigate",
+            selectAndGo: "Select & Go",
+            countEndpoints: "{count} {unit}",
+            endpointUnitSingle: "endpoint",
+            endpointUnitPlural: "endpoints",
+            noResults: "No endpoints found for \"<strong>{query}</strong>\".",
+            triggerTitle: "Search endpoints by route, method or summary (Ctrl + K or /)",
+            triggerLabel: "Search endpoints...",
+            activityBarTitle: "Search endpoints by route, method or summary (Ctrl + K or /)",
+            activityBarAria: "Search endpoints",
+            backToTopTitle: "Back to Top"
+        },
+        it: {
+            placeholder: "Cerca endpoint per percorso, metodo, controller o descrizione... (es. /users, post, chat, dev)",
+            close: "Chiudi",
+            navigate: "Naviga",
+            selectAndGo: "Seleziona & Vai",
+            countEndpoints: "{count} {unit}",
+            endpointUnitSingle: "endpoint",
+            endpointUnitPlural: "endpoint",
+            noResults: "Nessun endpoint trovato per \"<strong>{query}</strong>\".",
+            triggerTitle: "Cerca endpoint per rotta, verbo o descrizione (Ctrl + K oppure /)",
+            triggerLabel: "Cerca endpoint...",
+            activityBarTitle: "Cerca endpoint per rotta, verbo o descrizione (Ctrl + K oppure /)",
+            activityBarAria: "Cerca endpoint",
+            backToTopTitle: "Torna in Cima"
+        }
+    };
+
+    function getActiveLocale() {
+        return (
+            localStorage.getItem("swp_swagger_i18n_locale") ||
+            userConfig.locale ||
+            (window.SwaggerI18nConfig && window.SwaggerI18nConfig.locale) ||
+            (window.SwaggerI18nConfig && window.SwaggerI18nConfig.autoDetect && document.documentElement.lang && document.documentElement.lang.slice(0, 2)) ||
+            "en"
+        );
+    }
+
+    function t(key, defaultText, params = {}) {
+        const locale = getActiveLocale();
+        const hostOverrides = window.SwaggerI18nConfig?.messages?.[locale] || userConfig.messages?.[locale];
+        let str = hostOverrides?.[key] || I18N[locale]?.[key] || I18N["en"]?.[key] || defaultText;
+        if (params && typeof params === "object") {
+            for (const [k, v] of Object.entries(params)) {
+                str = str.replace(new RegExp(`\\{${k}\\}`, "g"), v);
+            }
+        }
+        return str;
+    }
+
+
     /** Standard Swagger color mapping for each HTTP method */
     const METHOD_COLORS = {
         get: { bg: "#61affe", text: "#ffffff" },
@@ -963,19 +1022,19 @@
         card.innerHTML = `
             <div class="spotlight-header">
                 <span class="spotlight-icon">🔍</span>
-                <input type="text" class="spotlight-input" placeholder="Search endpoints by path, method, tag or summary... (e.g. /users, post, chat, dev)" autocomplete="off" spellcheck="false" />
-                <span class="spotlight-esc-pill" id="spotlight-btn-esc" title="Close">ESC</span>
+                <input type="text" class="spotlight-input" placeholder="${escapeHtml(t("placeholder", "Search endpoints by path, method, tag or summary... (e.g. /users, post, chat, dev)"))}" autocomplete="off" spellcheck="false" />
+                <span class="spotlight-esc-pill" id="spotlight-btn-esc" title="${escapeHtml(t("close", "Close"))}">ESC</span>
             </div>
 
             <ul class="spotlight-results-list" id="spotlight-results-container"></ul>
 
             <div class="spotlight-footer">
                 <div class="spotlight-hints">
-                    <span class="spotlight-hint-item"><kbd>↑</kbd> <kbd>↓</kbd> Navigate</span>
-                    <span class="spotlight-hint-item"><kbd>↵</kbd> Select & Go</span>
-                    <span class="spotlight-hint-item"><kbd>ESC</kbd> Close</span>
+                    <span class="spotlight-hint-item"><kbd>↑</kbd> <kbd>↓</kbd> ${escapeHtml(t("navigate", "Navigate"))}</span>
+                    <span class="spotlight-hint-item"><kbd>↵</kbd> ${escapeHtml(t("selectAndGo", "Select & Go"))}</span>
+                    <span class="spotlight-hint-item"><kbd>ESC</kbd> ${escapeHtml(t("close", "Close"))}</span>
                 </div>
-                <div id="spotlight-count-badge">0 endpoints</div>
+                <div id="spotlight-count-badge">0 ${escapeHtml(t("endpointUnitPlural", "endpoints"))}</div>
             </div>
         `;
 
@@ -994,12 +1053,13 @@
             currentSearchResults = searchEndpoints(input.value);
             selectedResultIndex = 0;
 
-            countBadge.textContent = `${currentSearchResults.length} ${currentSearchResults.length === 1 ? 'endpoint' : 'endpoints'}`;
+            const unit = currentSearchResults.length === 1 ? t("endpointUnitSingle", "endpoint") : t("endpointUnitPlural", "endpoints");
+            countBadge.textContent = t("countEndpoints", `${currentSearchResults.length} ${unit}`, { count: currentSearchResults.length, unit });
 
             if (currentSearchResults.length === 0) {
                 resultsContainer.innerHTML = `
                     <div class="spotlight-empty-state">
-                        No endpoints found for "<strong>${escapeHtml(input.value)}</strong>".
+                        ${t("noResults", `No endpoints found for "<strong>${escapeHtml(input.value)}</strong>".`, { query: escapeHtml(input.value) })}
                     </div>
                 `;
                 return;
@@ -1134,10 +1194,10 @@
         const btn = document.createElement("button");
         btn.type = "button";
         btn.id = CONFIG.TRIGGER_BTN_ID;
-        btn.title = "Search endpoints by route, method or summary (Ctrl + K or /)";
+        btn.title = t("triggerTitle", "Search endpoints by route, method or summary (Ctrl + K or /)");
         btn.innerHTML = `
             <span style="font-size: 15px; opacity: 0.85;">🔍</span>
-            <span class="spotlight-trigger-label">Search endpoints...</span>
+            <span class="spotlight-trigger-label">${escapeHtml(t("triggerLabel", "Search endpoints..."))}</span>
             <div class="spotlight-kbd-group">
                 <span class="spotlight-kbd-pill">Ctrl K</span>
                 <span class="spotlight-kbd-pill">/</span>
@@ -1265,8 +1325,8 @@
 
         window.SwaggerActivityBar.registerItem({
             id: "spotlight-search",
-            title: "Search endpoints by route, method or summary (Ctrl + K or /)",
-            ariaLabel: "Search endpoints",
+            title: t("activityBarTitle", "Search endpoints by route, method or summary (Ctrl + K or /)"),
+            ariaLabel: t("activityBarAria", "Search endpoints"),
             iconHtml: `
                 <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:block;">
                     <circle cx="11" cy="11" r="8"/>
@@ -1315,6 +1375,20 @@
         }, CONFIG.UI_DISCOVERY_INTERVAL_MS);
 
         window.addEventListener("swagger-activity-bar:ready", registerGuideDocumentation);
+        window.addEventListener("swagger-i18n:locale-changed", () => {
+            registerGuideDocumentation(true);
+            const triggerBtn = document.getElementById(CONFIG.TRIGGER_BTN_ID);
+            if (triggerBtn) {
+                triggerBtn.title = t("triggerTitle", "Search endpoints by route, method or summary (Ctrl + K or /)");
+                const label = triggerBtn.querySelector(".spotlight-trigger-label");
+                if (label) label.textContent = t("triggerLabel", "Search endpoints...");
+            }
+            if (window.SwaggerActivityBar && typeof window.SwaggerActivityBar.updateItem === "function") {
+                window.SwaggerActivityBar.updateItem("spotlight-search", {
+                    title: t("activityBarTitle", "Search endpoints by route, method or summary (Ctrl + K or /)")
+                });
+            }
+        });
 
         // DOM observer to ensure search bar persistence across Swagger UI re-renders
         const domObserver = new MutationObserver(() => {
@@ -1331,8 +1405,8 @@
     /**
      * Publishes plugin metadata and documentation to the interactive Activity Bar guide.
      */
-    function registerGuideDocumentation() {
-        if (isGuideRegistered) return;
+    function registerGuideDocumentation(force = false) {
+        if (isGuideRegistered && !force) return;
         if (window.SwaggerActivityBar && typeof window.SwaggerActivityBar.registerPluginGuide === "function") {
             isGuideRegistered = true;
             window.SwaggerActivityBar.registerPluginGuide({
@@ -1352,7 +1426,17 @@
                         <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                     </svg>
                 `,
-                manual: `
+                i18n: {
+                    en: {
+                        name: "Spotlight Search (Ctrl + K)",
+                        description: "Command Palette-style quick search with multi-token fuzzy matching across all endpoints, auto-expanding parent controllers, and visual glow centering.",
+                        shortcuts: [
+                            "Ctrl + K: Open Spotlight quick search",
+                            "↑ / ↓: Navigate between results",
+                            "Enter: Navigate to and expand endpoint",
+                            "Esc: Close search modal"
+                        ],
+                        manual: `
 ### Overview
 The Spotlight Command Palette enables you to instantly locate and expand any API endpoint without manually scrolling through hundreds of operations in Swagger UI.
 
@@ -1365,6 +1449,31 @@ Press \`Ctrl + K\` (or \`Cmd + K\` on macOS) at any time, or click the horizonta
 - **Async Expansion**: Automatically unfolds collapsed controller groups and endpoints before smoothly scrolling with an animated glow ring.
 - **Back to Top Button**: A floating button in the bottom-right corner allows returning to the top of the documentation with a single click.
 `
+                    },
+                    it: {
+                        name: "Ricerca Rapida Spotlight (Ctrl + K)",
+                        description: "Ricerca rapida stile Command Palette con fuzzy search tra tutti gli endpoint, apertura asincrona dei controller e centratura glow.",
+                        shortcuts: [
+                            "Ctrl + K: Apre la ricerca rapida Spotlight",
+                            "↑ / ↓: Naviga tra i risultati",
+                            "Invio: Raggiungi ed espandi l'endpoint",
+                            "Esc: Chiude la modale di ricerca"
+                        ],
+                        manual: `
+### Panoramica
+La Command Palette Spotlight consente di individuare ed espandere qualsiasi rotta API senza dover scorrere manualmente centinaia di endpoint in Swagger UI.
+
+### Scorciatoia Rapida
+Premi in qualunque momento \`Ctrl + K\` (o \`Cmd + K\` su Mac) oppure clicca la barra di ricerca orizzontale o l'icona della lente nell'Activity Bar.
+
+### Caratteristiche
+- **Ricerca Fuzzy**: cerca simultaneamente per percorso (\`/api/...\`), tag controller, descrizione e verbo HTTP (\`GET\`, \`POST\`, ecc.).
+- **Navigazione da Tastiera**: scorri le corrispondenze con le frecce \`↑\` e \`↓\` e premi \`Invio\` per saltare direttamente alla testata dell'endpoint.
+- **Espansione Asincrona**: se il controller padre è chiuso, viene espanso automaticamente e la pagina scorre con un anello luminoso Glow.
+- **Pulsante Torna in Cima**: un pulsante discreto fluttuante in basso a destra consente di ritornare all'inizio della pagina in un click.
+`
+                    }
+                }
             });
         }
     }

@@ -89,3 +89,31 @@ You can customize the plugin by declaring `window.SwaggerNetworkHistoryConfig` b
 3. Click the Activity Bar network icon to open the history drawer.
 4. Click **Replay** on any previous request to restore parameters, focus the operation, and trigger execution.
 5. Click **Restore** to populate parameters into the form without auto-executing.
+
+---
+
+## Internationalization (i18n)
+
+This plugin fully supports runtime internationalization (i18n) with base dictionaries for:
+- 🇬🇧 **English (`en`)** - Default
+- 🇮🇹 **Italian (`it`)**
+
+### Runtime Language Switcher
+When used alongside `swagger-activity-bar.js`, users can toggle the active language live via the Activity Bar switcher (`🌐 EN | IT`) at the bottom left. The active language is automatically persisted to `localStorage` under the key `"swp_swagger_i18n_locale"` and survives page reloads.
+
+### Host Configuration & Custom Overrides
+You can define initial locale or override specific message keys via `window.SwaggerI18nConfig`:
+
+```html
+<script>
+  window.SwaggerI18nConfig = {
+    locale: "it", // "en" | "it" (default: "en")
+    autoDetect: true, // Auto-detect from <html lang="..."> if no saved preference
+    messages: {
+      it: {
+        // Optional key overrides
+      }
+    }
+  };
+</script>
+```

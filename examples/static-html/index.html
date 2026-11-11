@@ -26,6 +26,17 @@
         };
     </script>
 
+    <!-- Optional Global i18n Configuration (Overrides, Custom Locales, Initial Locale) -->
+    <script>
+        window.SwaggerI18nConfig = {
+            locale: "en", // "en" | "it" (persisted across reloads in localStorage; switchable live via Activity Bar 🌐)
+            autoDetect: true, // auto-detect from <html lang="..."> if no preference is saved in localStorage
+            messages: {
+                // Host overrides can be added here
+            }
+        };
+    </script>
+
     <!-- Plugins Suite -->
     <script src="../../plugins/activity-bar/swagger-activity-bar.js"></script>
     <script src="../../plugins/spotlight-search/swagger-spotlight-search.js"></script>

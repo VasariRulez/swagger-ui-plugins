@@ -11,6 +11,7 @@ The **Activity Bar** attaches a vertical toolbar to the left edge of Swagger UI,
 - **VS Code-style Activity Dock**: Docked vertically on the left edge with customizable icon buttons, active indicators, and notification badges.
 - **Unified Sidebar / Drawer Manager**: Manages opening, closing, and toggling of flyout drawers from any registered plugin (e.g. Network History, SignalR Tester, JWT Inspector).
 - **Interactive Extensions Guide (Help Center)**: Built-in modal dialog documenting every active plugin, keyboard shortcut, configuration snippet, and interactive walkthrough.
+- **Runtime Internationalization (i18n) & Language Switcher**: Built-in `🌐 EN | IT` interactive toggle pinned to the bottom of the bar, providing instant runtime translation across all suite plugins with `localStorage` persistence.
 - **Dynamic Plugin Self-Registration API (`window.SwaggerActivityBar.registerPluginGuide`)**: Other plugins automatically register their metadata, badges, and documentation cards when loaded.
 - **Zero Dependencies**: Pure vanilla JavaScript & CSS with isolated namespacing (`swp-activity-bar-*`, `swp-guide-*`).
 
@@ -125,6 +126,68 @@ if (window.SwaggerActivityBar && typeof window.SwaggerActivityBar.registerItem =
 
 > [!NOTE]
 > The Extensions Guide is opened by clicking the puzzle icon (🧩) at the bottom of the Activity Bar.
+
+---
+
+## Internationalization (i18n) & Runtime Language Switcher
+
+The Activity Bar serves as the internationalization hub for the entire Swagger UI Plugins Suite.
+
+### Features
+- **Interactive Language Popover**: Pinned to the bottom section of the Activity Bar (`🌐 EN` / `🌐 IT` / `🌐 AUTO`). Clicking opens a sleek popup menu allowing instant switching between English, Italian, or resetting to configuration defaults.
+- **Reset to Config (Auto)**: Clicking `↺ Reset to Config (Auto)` removes the `localStorage` override, allowing the individual plugin configurations (`userConfig.locale`, e.g. `SwaggerSignalRConfig.locale`) and host settings (`window.SwaggerI18nConfig`) to resume full control.
+- **LocalStorage Persistence**: Manual language selection is saved to `localStorage.getItem("swp_swagger_i18n_locale")` and survives page refreshes.
+- **Dynamic Event Dispatch**: When language changes or is reset, the plugin fires a window event:
+  ```javascript
+  window.dispatchEvent(new CustomEvent("swagger-i18n:locale-changed", { detail: { locale: "it", isReset: false } }));
+  ```
+  All suite plugins listen to this event and dynamically re-render their UI.
+- **Host Configuration (`window.SwaggerI18nConfig`)**:
+  ```javascript
+  window.SwaggerI18nConfig = {
+      locale: "it", // Initial locale if no localStorage preference is found ("en" | "it")
+      autoDetect: true, // If true, detects from <html lang="...">
+      messages: {
+          en: { /* host overrides */ },
+          it: { /* host overrides */ }
+      }
+  };
+  ```
+
+### Localized Plugin Guide Self-Registration
+Plugins can provide translations for their Extensions Guide card:
+```javascript
+window.SwaggerActivityBar.registerPluginGuide({
+    id: "my-plugin",
+    name: "My Plugin",
+    description: "Default English overview",
+    i18n: {
+        en: {
+            name: "My Plugin",
+            description: "English description",
+            shortcuts: ["Esc: Close panel"],
+            manual: "### Overview\\nFull English guide markdown..."
+        },
+        it: {
+            name: "Mio Plugin",
+            description: "Descrizione in italiano",
+            shortcuts: ["Esc: Chiudi pannello"],
+            manual: "### Panoramica\\nGuida completa in italiano..."
+        }
+    }
+});
+```
+
+### Global i18n API (`window.SwaggerI18n`)
+The Activity Bar exposes `window.SwaggerI18n`:
+```javascript
+window.SwaggerI18n.getLocale(); // "en" | "it"
+window.SwaggerI18n.setLocale("it"); // sets manual override and dispatches event
+window.SwaggerI18n.resetLocale(); // removes localStorage override so individual plugin configs take precedence
+window.SwaggerI18n.isOverridden(); // true if manual choice is active in localStorage, false if in Auto/Config mode
+window.SwaggerI18n.t("myKey", "Default Fallback"); // translates a key
+window.SwaggerI18n.getAvailableLocales(); // ["en", "it"]
+```
 
 ---
 

@@ -52,6 +52,97 @@
     };
 
     // =========================================================================
+    // =========================================================================
+    // 1.1 INTERNATIONALIZATION (i18n) ENGINE & DICTIONARIES
+    // =========================================================================
+    const I18N = {
+        en: {
+            jsonView: "📄 JSON View",
+            tableView: "📊 Table View",
+            metaPaginated: "Paginated: Page {page} of {totalPages} ({totalCount} total)",
+            metaList: "List of {count} items",
+            searchPlaceholder: "Filter rows in real time...",
+            clearSearchTitle: "Clear search",
+            columnsBtn: "👁️ Columns",
+            exportCsvTitle: "Export displayed rows to CSV file",
+            copyBtn: "📋 Copy",
+            copyBtnTitle: "Copy rows as JSON to clipboard",
+            copied: "✓ Copied!",
+            noResults: "No items match current search criteria.",
+            totalRecords: "Total records: <strong>{count}</strong>",
+            showingRecords: "Showing <strong>{start}-{end}</strong> of <strong>{total}</strong> records",
+            firstPageTitle: "First Page",
+            prevPageTitle: "Previous Page",
+            nextPageTitle: "Next Page",
+            lastPageTitle: "Last Page",
+            pageOf: "Page {page} of {totalPages}",
+            perPage: "{size} / page",
+            copyNestedBtn: "📋 Copy",
+            nestedCopiedAlert: "Sub-JSON copied to clipboard!"
+        },
+        it: {
+            jsonView: "📄 Vista JSON",
+            tableView: "📊 Vista Tabella",
+            metaPaginated: "Paginato: Pagina {page} di {totalPages} ({totalCount} totali)",
+            metaList: "Elenco di {count} record",
+            searchPlaceholder: "Filtra righe in tempo reale...",
+            clearSearchTitle: "Azzera ricerca",
+            columnsBtn: "👁️ Colonne",
+            exportCsvTitle: "Esporta le righe visualizzate in file CSV",
+            copyBtn: "📋 Copia",
+            copyBtnTitle: "Copia righe come JSON negli appunti",
+            copied: "✓ Copiato!",
+            noResults: "Nessun elemento corrisponde ai criteri di ricerca.",
+            totalRecords: "Totale record: <strong>{count}</strong>",
+            showingRecords: "Mostrati <strong>{start}-{end}</strong> di <strong>{total}</strong> record",
+            firstPageTitle: "Prima Pagina",
+            prevPageTitle: "Pagina Precedente",
+            nextPageTitle: "Pagina Successiva",
+            lastPageTitle: "Ultima Pagina",
+            pageOf: "Pagina {page} di {totalPages}",
+            perPage: "{size} / pag",
+            copyNestedBtn: "📋 Copia",
+            nestedCopiedAlert: "Sotto-JSON copiato negli appunti!"
+        }
+    };
+
+    /**
+     * Resolves the active language code.
+     * @returns {"en"|"it"}
+     */
+    function getActiveLocale() {
+        const stored = localStorage.getItem("swp_swagger_i18n_locale");
+        if (stored === "it" || stored === "en") return stored;
+        if (userConfig.locale === "it" || userConfig.locale === "en") return userConfig.locale;
+        if (window.SwaggerI18nConfig && (window.SwaggerI18nConfig.locale === "it" || window.SwaggerI18nConfig.locale === "en")) {
+            return window.SwaggerI18nConfig.locale;
+        }
+        if (window.SwaggerI18nConfig && window.SwaggerI18nConfig.autoDetect && typeof document !== "undefined") {
+            const docLang = (document.documentElement.lang || "").toLowerCase();
+            if (docLang.startsWith("it")) return "it";
+        }
+        return "en";
+    }
+
+    /**
+     * Translates a message key into current locale with parameter substitution and fallback.
+     */
+    function t(key, defaultText, params = {}) {
+        const locale = getActiveLocale();
+        const hostOverrides = (window.SwaggerI18nConfig && window.SwaggerI18nConfig.messages && window.SwaggerI18nConfig.messages[locale]) ||
+                              (userConfig.messages && userConfig.messages[locale]);
+        let str = (hostOverrides && hostOverrides[key]) ||
+                  (I18N[locale] && I18N[locale][key]) ||
+                  (I18N["en"] && I18N["en"][key]) ||
+                  defaultText;
+        if (params && typeof params === "object") {
+            for (const [k, v] of Object.entries(params)) {
+                str = str.replace(new RegExp(`\\{${k}\\}`, "g"), v);
+            }
+        }
+        return str;
+    }
+
     // 2. STILI CSS ADATTIVI (Light e Dark Mode)
     // =========================================================================
     function injectStyles() {
@@ -939,20 +1030,20 @@
             <div class="swagger-grid-toolbar">
                 <div class="swagger-grid-search-wrap">
                     <span class="swagger-grid-search-icon">🔍</span>
-                    <input type="text" class="swagger-grid-search-input" placeholder="Filtra righe in tempo reale..." />
-                    <button type="button" class="swagger-grid-search-clear" title="Clear search">✕</button>
+                    <input type="text" class="swagger-grid-search-input" placeholder="${t("searchPlaceholder", "Filter rows in real time...")}" />
+                    <button type="button" class="swagger-grid-search-clear" title="${t("clearSearchTitle", "Clear search")}">✕</button>
                 </div>
 
                 <div class="swagger-grid-tools">
                     <button type="button" class="swagger-grid-btn btn-toggle-cols" title="Show or hide columns">
-                        <span>👁️ Colonne</span>
+                        <span class="swp-grid-cols-label">${t("columnsBtn", "👁️ Columns")}</span>
                         <span class="cols-count-badge" style="font-size:10px; opacity:0.8;">(${columns.length})</span>
                     </button>
-                    <button type="button" class="swagger-grid-btn btn-export-csv" title="Esporta le righe visualizzate in file CSV">
+                    <button type="button" class="swagger-grid-btn btn-export-csv" title="${t("exportCsvTitle", "Export displayed rows to CSV file")}">
                         <span>📥 CSV</span>
                     </button>
-                    <button type="button" class="swagger-grid-btn btn-copy-grid" title="Copy rows as JSON to clipboard">
-                        <span>📋 Copia</span>
+                    <button type="button" class="swagger-grid-btn btn-copy-grid" title="${t("copyBtnTitle", "Copy rows as JSON to clipboard")}">
+                        <span class="swp-grid-copy-label">${t("copyBtn", "📋 Copy")}</span>
                     </button>
                 </div>
 
@@ -1142,7 +1233,7 @@
                 const emptyTr = document.createElement("tr");
                 emptyTr.innerHTML = `
                     <td colspan="${visibleList.length}" style="text-align: center; padding: 24px; color: var(--grid-text-muted); font-style: italic;">
-                        No items match current search criteria.
+                        ${t("noResults", "No items match current search criteria.")}
                     </td>
                 `;
                 tbody.appendChild(emptyTr);
@@ -1193,14 +1284,14 @@
 
             if (isServer) {
                 const { page, totalPages, totalCount } = gridState.serverPagination;
-                footerCounter.innerHTML = `<span>Totale record: <strong>${totalCount}</strong></span>`;
+                footerCounter.innerHTML = `<span>${t("totalRecords", `Total records: <strong>${totalCount}</strong>`, { count: totalCount })}</span>`;
 
                 footerPagination.innerHTML = `
-                    <button type="button" class="swagger-grid-page-btn btn-page-first" ${page <= 1 ? "disabled" : ""} title="Prima Pagina">⏮</button>
-                    <button type="button" class="swagger-grid-page-btn btn-page-prev" ${page <= 1 ? "disabled" : ""} title="Pagina Precedente">◀</button>
-                    <span class="swagger-grid-page-info">Pagina ${page} di ${totalPages}</span>
-                    <button type="button" class="swagger-grid-page-btn btn-page-next" ${page >= totalPages ? "disabled" : ""} title="Pagina Successiva">▶</button>
-                    <button type="button" class="swagger-grid-page-btn btn-page-last" ${page >= totalPages ? "disabled" : ""} title="Ultima Pagina">⏭</button>
+                    <button type="button" class="swagger-grid-page-btn btn-page-first" ${page <= 1 ? "disabled" : ""} title="${t("firstPageTitle", "First Page")}">⏮</button>
+                    <button type="button" class="swagger-grid-page-btn btn-page-prev" ${page <= 1 ? "disabled" : ""} title="${t("prevPageTitle", "Previous Page")}">◀</button>
+                    <span class="swagger-grid-page-info">${t("pageOf", `Page ${page} of ${totalPages}`, { page, totalPages })}</span>
+                    <button type="button" class="swagger-grid-page-btn btn-page-next" ${page >= totalPages ? "disabled" : ""} title="${t("nextPageTitle", "Next Page")}">▶</button>
+                    <button type="button" class="swagger-grid-page-btn btn-page-last" ${page >= totalPages ? "disabled" : ""} title="${t("lastPageTitle", "Last Page")}">⏭</button>
                 `;
 
                 footerPagination.querySelector(".btn-page-first")?.addEventListener("click", () => triggerServerPageChange(opblockElement, wrapper, 1));
@@ -1214,11 +1305,12 @@
                 const start = total === 0 ? 0 : (gridState.clientPage - 1) * gridState.clientPageSize + 1;
                 const end = Math.min(total, gridState.clientPage * gridState.clientPageSize);
 
-                footerCounter.innerHTML = `<span>Mostrati <strong>${start}-${end}</strong> di <strong>${total}</strong> record</span>`;
+                footerCounter.innerHTML = `<span>${t("showingRecords", `Showing <strong>${start}-${end}</strong> of <strong>${total}</strong> records`, { start, end, total })}</span>`;
 
                 let sizeOptionsHtml = "";
                 CONFIG.PAGE_SIZE_OPTIONS.forEach((size) => {
-                    sizeOptionsHtml += `<option value="${size}" ${gridState.clientPageSize === size ? "selected" : ""}>${size} / pag</option>`;
+                    const label = t("perPage", `${size} / page`, { size });
+                    sizeOptionsHtml += `<option value="${size}" ${gridState.clientPageSize === size ? "selected" : ""}>${label}</option>`;
                 });
 
                 footerPagination.innerHTML = `
@@ -1269,7 +1361,7 @@
         copyGridBtn.addEventListener("click", () => {
             navigator.clipboard.writeText(JSON.stringify(gridState.filteredRows, null, 2)).then(() => {
                 const oldText = copyGridBtn.innerHTML;
-                copyGridBtn.innerHTML = `<span>✓ Copiato!</span>`;
+                copyGridBtn.innerHTML = `<span>${t("copied", "✓ Copied!")}</span>`;
                 setTimeout(() => (copyGridBtn.innerHTML = oldText), 1500);
             });
         });
@@ -1298,7 +1390,7 @@
                 <div class="swagger-grid-popover-header">
                     <span>${escapeHtml(title)}</span>
                     <div style="display:flex; gap:6px;">
-                        <button type="button" class="swagger-grid-btn btn-copy-nested">📋 Copia</button>
+                        <button type="button" class="swagger-grid-btn btn-copy-nested">${t("copyNestedBtn", "📋 Copy")}</button>
                         <button type="button" class="swagger-grid-btn btn-close-nested">✕</button>
                     </div>
                 </div>
@@ -1311,7 +1403,7 @@
         overlay.querySelector(".btn-close-nested")?.addEventListener("click", closePopover);
         overlay.querySelector(".btn-copy-nested")?.addEventListener("click", () => {
             navigator.clipboard.writeText(formatted);
-            alert("Sub-JSON copied to clipboard!");
+            alert(t("nestedCopiedAlert", "Sub-JSON copied to clipboard!"));
         });
 
         overlay.addEventListener("click", (e) => {
@@ -1627,17 +1719,21 @@
 
         const itemsCount = tabularData.items.length;
         const metaText = tabularData.pagination?.isServerPaged
-            ? `Paginato: Pagina ${tabularData.pagination.page} di ${tabularData.pagination.totalPages} (${tabularData.pagination.totalCount} totali)`
-            : `Elenco di ${itemsCount} record`;
+            ? t("metaPaginated", `Paginated: Page ${tabularData.pagination.page} of ${tabularData.pagination.totalPages} (${tabularData.pagination.totalCount} total)`, {
+                page: tabularData.pagination.page,
+                totalPages: tabularData.pagination.totalPages,
+                totalCount: tabularData.pagination.totalCount
+            })
+            : t("metaList", `List of ${itemsCount} items`, { count: itemsCount });
 
         gridContainer.innerHTML = `
             <div class="swagger-grid-toggle-bar">
                 <div class="swagger-grid-toggle-group">
                     <button type="button" class="swagger-grid-toggle-btn btn-view-json is-active" title="View original JSON format">
-                        <span>📄 JSON View</span>
+                        <span class="swp-grid-btn-json-label">${t("jsonView", "📄 JSON View")}</span>
                     </button>
                     <button type="button" class="swagger-grid-toggle-btn btn-view-table" title="Display interactive table grid">
-                        <span>📊 Table View</span>
+                        <span class="swp-grid-btn-table-label">${t("tableView", "📊 Table View")}</span>
                         <span class="swagger-grid-badge">${itemsCount}</span>
                     </button>
                 </div>
@@ -1739,6 +1835,22 @@
         registerGuideDocumentation();
 
         window.addEventListener("swagger-activity-bar:ready", registerGuideDocumentation);
+            window.addEventListener("swagger-i18n:locale-changed", () => {
+                registerGuideDocumentation(true);
+                // Aggiorna le etichette nelle viste griglia attive
+                document.querySelectorAll(".swagger-grid-container").forEach((gc) => {
+                    const btnJson = gc.querySelector(".swp-grid-btn-json-label");
+                    if (btnJson) btnJson.textContent = t("jsonView", "📄 JSON View");
+                    const btnTable = gc.querySelector(".swp-grid-btn-table-label");
+                    if (btnTable) btnTable.textContent = t("tableView", "📊 Table View");
+                    const searchInput = gc.querySelector(".swagger-grid-search-input");
+                    if (searchInput) searchInput.placeholder = t("searchPlaceholder", "Filter rows in real time...");
+                    const colsLabel = gc.querySelector(".swp-grid-cols-label");
+                    if (colsLabel) colsLabel.textContent = t("columnsBtn", "👁️ Columns");
+                    const copyLabel = gc.querySelector(".swp-grid-copy-label");
+                    if (copyLabel) copyLabel.textContent = t("copyBtn", "📋 Copy");
+                });
+            });
 
         // Observer per intercettare nuove risposte HTTP renderizzate da Swagger UI
         const observer = new MutationObserver(() => {
@@ -1754,21 +1866,20 @@
     /**
      * Publishes plugin metadata and documentation to interactive Activity Bar guide.
      */
-    function registerGuideDocumentation() {
-        if (isGuideRegistered) return;
+    function registerGuideDocumentation(force = false) {
+        if (isGuideRegistered && !force) return;
         if (window.SwaggerActivityBar && typeof window.SwaggerActivityBar.registerPluginGuide === "function") {
             isGuideRegistered = true;
             window.SwaggerActivityBar.registerPluginGuide({
                 id: "data-grid-view",
                 name: "Data Grid & Table View",
                 version: "1.0.0",
-                description: "Transforms tabular or paginated JSON responses into interactive Excel-like data grids with sorting, filtering, and CSV export.",
+                description: "Interactive tabular data grid for array endpoints in Swagger UI with sorting, search, column visibility, and CSV export.",
                 shortcuts: [
                     "Toggle Table/JSON: Switch between data grid and JSON view",
-                    "Click Header: Sort column ascending or descending",
+                    "Column Header: Click to sort ascending or descending",
                     "Search Table: Filter visible rows in real time",
-                    "{...}: Inspect nested complex objects in modal",
-                    "Export CSV: Download dataset for Excel"
+                    "Export CSV: Download filtered tabular dataset"
                 ],
                 iconHtml: `
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1776,19 +1887,53 @@
                         <line x1="3" y1="9" x2="21" y2="9"/>
                         <line x1="3" y1="15" x2="21" y2="15"/>
                         <line x1="9" y1="3" x2="9" y2="21"/>
+                        <line x1="15" y1="3" x2="15" y2="21"/>
                     </svg>
                 `,
-                manual: `
+                i18n: {
+                    en: {
+                        name: "Data Grid & Table View",
+                        description: "Interactive tabular data grid for array endpoints in Swagger UI with sorting, search, column visibility, and CSV export.",
+                        shortcuts: [
+                            "Toggle Table/JSON: Switch between data grid and JSON view",
+                            "Column Header: Click to sort ascending or descending",
+                            "Search Table: Filter visible rows in real time",
+                            "Export CSV: Download filtered tabular dataset"
+                        ],
+                        manual: `
 ### Overview
 When an endpoint returns a list of items or a paginated envelope, the plugin injects a convenient **Table View / JSON View** toggle.
 
-### Grid Capabilities
-- **Interactive Sorting**: click any column header to sort data ascending or descending.
-- **Instant Search**: type in the search box to filter records in real time without additional network requests.
-- **Live Pagination**: select page size options and navigate pages with synchronized server or client pagination.
-- **Nested Object Inspection**: columns with nested objects or arrays display a \`{...}\` chip that opens a modal viewer.
-- **CSV Export**: download the dataset in CSV format with configurable filename generation.
+### Table View Capabilities
+- **Sorting**: click any column header to toggle ascending/descending order.
+- **Search & Filtering**: instant real-time text filter across all properties.
+- **Column Visibility**: toggle individual columns or reset to default.
+- **Pagination**: full support for client-side slicing and backend server-driven pagination (\`page\`, \`pageSize\`, \`totalCount\`).
+- **CSV Export**: 1-click export of current filtered view to comma-separated file.
 `
+                    },
+                    it: {
+                        name: "Data Grid & Vista Tabella",
+                        description: "Griglia tabellare interattiva per endpoint di lista in Swagger UI con ordinamento, ricerca, visibilità colonne ed esportazione CSV.",
+                        shortcuts: [
+                            "Toggle Tabella/JSON: Alterna tra vista a griglia e JSON",
+                            "Intestazione Colonna: Click per ordinare crescente o decrescente",
+                            "Ricerca: Filtra le righe visibili in tempo reale",
+                            "Esporta CSV: Scarica il dataset tabellare filtrato"
+                        ],
+                        manual: `
+### Panoramica
+Quando un endpoint restituisce un array di elementi o un envelope paginato, il plugin inserisce una comoda barra per alternare tra **Vista Tabella** e **Vista JSON**.
+
+### Funzionalità della Vista Tabella
+- **Ordinamento**: clicca sull'intestazione di qualsiasi colonna per invertire l'ordine alfabetico o numerico.
+- **Ricerca & Filtro**: ricerca istantanea su tutti i campi delle righe visualizzate.
+- **Visibilità Colonne**: menu a tendina per mostrare/nascondere singole colonne.
+- **Paginazione**: supporto sia per la paginazione locale client-side sia per la navigazione server-side (\`page\`, \`pageSize\`, \`totalCount\`).
+- **Esportazione CSV**: download con 1 click del dataset filtrato in formato compatibile con Excel/fogli di calcolo.
+`
+                    }
+                }
             });
         }
     }

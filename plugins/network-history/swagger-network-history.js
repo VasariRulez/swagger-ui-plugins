@@ -75,6 +75,103 @@
     };
 
     // =========================================================================
+    // 1.1 INTERNATIONALIZATION (i18n) ENGINE & LOCALES
+    // =========================================================================
+    const I18N = {
+        en: {
+            drawerTitle: "Network History",
+            clearBtn: "Clear",
+            clearTitle: "Clear entire network history",
+            closeDrawer: "Close drawer (Esc)",
+            searchPlaceholder: "Filter by URL, route, or method...",
+            clearSearch: "Clear search",
+            filterAll: "All",
+            emptyTitle: "No network calls recorded{filterSuffix}.",
+            emptyDesc: "Execute a request in Swagger UI to view it here in real time.",
+            emptyFilterSuffix: " matching current filter",
+            time: "Time",
+            latency: "Latency",
+            size: "Size",
+            replay: "Replay",
+            replayTitle: "Replay call immediately with smooth scroll and auto-execute",
+            restore: "Restore",
+            restoreTitle: "Populate parameters into form without executing",
+            detailsTitle: "Payload details",
+            tabRequest: "Request",
+            tabResponse: "Response",
+            copyCurl: "📋 Copy cURL",
+            copyUrl: "🔗 Copy URL",
+            copyResponse: "📋 Copy Response JSON",
+            sentPayload: "Sent Payload (Body):",
+            noBodySent: "(No request body sent)",
+            emptyResponse: "(Empty response)",
+            status: "Status",
+            clearConfirm: "Are you sure you want to clear the entire network history?",
+            endpointNotFound: "Unable to find endpoint [{method}] {path} in the current Swagger UI documentation.",
+            activityBarTitle: "Open / Close Network Call History",
+            activityBarAria: "Network History",
+            copied: "✓ Copied!"
+        },
+        it: {
+            drawerTitle: "Cronologia Chiamate",
+            clearBtn: "Svuota",
+            clearTitle: "Svuota tutta la cronologia",
+            closeDrawer: "Chiudi pannello (Esc)",
+            searchPlaceholder: "Filtra per URL, rotta o metodo...",
+            clearSearch: "Cancella ricerca",
+            filterAll: "Tutti",
+            emptyTitle: "Nessuna chiamata registrata{filterSuffix}.",
+            emptyDesc: "Esegui una richiesta su Swagger UI per visualizzarla qui in tempo reale.",
+            emptyFilterSuffix: " corrispondente ai filtri",
+            time: "Orario",
+            latency: "Latenza",
+            size: "Dimensione",
+            replay: "Replay",
+            replayTitle: "Riesegui chiamata immediatamente con scrolling e auto-execute",
+            restore: "Ripristina",
+            restoreTitle: "Compila i campi senza eseguire la chiamata",
+            detailsTitle: "Dettagli payload",
+            tabRequest: "Richiesta",
+            tabResponse: "Risposta",
+            copyCurl: "📋 Copia cURL",
+            copyUrl: "🔗 Copia URL",
+            copyResponse: "📋 Copia JSON Risposta",
+            sentPayload: "Payload Inviato (Body):",
+            noBodySent: "(Nessun body inviato)",
+            emptyResponse: "(Risposta vuota)",
+            status: "Stato",
+            clearConfirm: "Sei sicuro di voler svuotare l'intera cronologia delle chiamate?",
+            endpointNotFound: "Impossibile trovare l'endpoint [{method}] {path} nella documentazione Swagger corrente.",
+            activityBarTitle: "Apri / Chiudi Cronologia Chiamate (Network History)",
+            activityBarAria: "Cronologia Chiamate",
+            copied: "✓ Copiato!"
+        }
+    };
+
+    function getActiveLocale() {
+        return (
+            localStorage.getItem("swp_swagger_i18n_locale") ||
+            userConfig.locale ||
+            (window.SwaggerI18nConfig && window.SwaggerI18nConfig.locale) ||
+            (window.SwaggerI18nConfig && window.SwaggerI18nConfig.autoDetect && document.documentElement.lang && document.documentElement.lang.slice(0, 2)) ||
+            "en"
+        );
+    }
+
+    function t(key, defaultText, params = {}) {
+        const locale = getActiveLocale();
+        const hostOverrides = window.SwaggerI18nConfig?.messages?.[locale] || userConfig.messages?.[locale];
+        let str = hostOverrides?.[key] || I18N[locale]?.[key] || I18N["en"]?.[key] || defaultText;
+        if (params && typeof params === "object") {
+            for (const [k, v] of Object.entries(params)) {
+                str = str.replace(new RegExp(`\\{${k}\\}`, "g"), v);
+            }
+        }
+        return str;
+    }
+
+
+    // =========================================================================
     // 2. INTERNAL APPLICATION STATE
     // =========================================================================
 
@@ -356,7 +453,7 @@
      */
     function clearHistory() {
         if (state.history.length === 0) return;
-        const confirmed = window.confirm("Are you sure you want to clear the entire network history?");
+        const confirmed = window.confirm(t("clearConfirm", "Are you sure you want to clear the entire network history?"));
         if (!confirmed) return;
 
         state.history = [];
@@ -886,7 +983,7 @@
         }
 
         if (!opblock) {
-            alert(`Unable to find endpoint [${item.method}] ${item.path} in the current Swagger UI documentation.`);
+            alert(t("endpointNotFound", `Unable to find endpoint [${item.method}] ${item.path} in the current Swagger UI documentation.`, { method: item.method, path: item.path }));
             return;
         }
 
@@ -1057,7 +1154,8 @@
         if (window.SwaggerActivityBar && typeof window.SwaggerActivityBar.registerItem === "function") {
             window.SwaggerActivityBar.registerItem({
                 id: "network-history",
-                title: "Cronologia Richieste & Performance (Network History)",
+                title: t("activityBarTitle", "Network History & Metrics"),
+                ariaLabel: t("activityBarAria", "Network History"),
                 iconHtml: `
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;">
                         <circle cx="12" cy="12" r="10"></circle>
@@ -1142,7 +1240,7 @@
 
         const drawer = document.createElement("aside");
         drawer.id = CONFIG.ELEMENT_IDS.DRAWER;
-        drawer.setAttribute("aria-label", "Cronologia chiamate di rete");
+        drawer.setAttribute("aria-label", t("drawerTitle", "Network History"));
 
         drawer.innerHTML = `
             <!-- Header Drawer -->
@@ -1152,18 +1250,18 @@
                         <circle cx="12" cy="12" r="10"></circle>
                         <polyline points="12 6 12 12 16 14"></polyline>
                     </svg>
-                    <span class="swp-nh-title">Network History</span>
+                    <span class="swp-nh-title">${escapeHtml(t("drawerTitle", "Network History"))}</span>
                     <span id="${CONFIG.ELEMENT_IDS.COUNT_BADGE}" class="swp-nh-count-badge">0</span>
                 </div>
                 <div class="swp-nh-header-right">
-                    <button type="button" id="${CONFIG.ELEMENT_IDS.CLEAR_BTN}" class="swp-nh-btn-icon" title="Clear entire network history">
+                    <button type="button" id="${CONFIG.ELEMENT_IDS.CLEAR_BTN}" class="swp-nh-btn-icon" title="${escapeHtml(t("clearTitle", "Clear entire network history"))}">
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <polyline points="3 6 5 6 21 6"></polyline>
                             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                         </svg>
-                        <span>Svuota</span>
+                        <span>${escapeHtml(t("clearBtn", "Clear"))}</span>
                     </button>
-                    <button type="button" class="swp-nh-btn-icon swp-nh-btn-close" title="Close drawer (Esc)">
+                    <button type="button" class="swp-nh-btn-icon swp-nh-btn-close" title="${escapeHtml(t("closeDrawer", "Close drawer (Esc)"))}">
                         ✕
                     </button>
                 </div>
@@ -1176,12 +1274,12 @@
                         <circle cx="11" cy="11" r="8"></circle>
                         <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                     </svg>
-                    <input type="text" id="${CONFIG.ELEMENT_IDS.SEARCH_INPUT}" class="swp-nh-search-input" placeholder="Filter by URL, route, or method..." />
-                    <button type="button" class="swp-nh-search-clear" title="Clear search" style="display:none;">✕</button>
+                    <input type="text" id="${CONFIG.ELEMENT_IDS.SEARCH_INPUT}" class="swp-nh-search-input" placeholder="${escapeHtml(t("searchPlaceholder", "Filter by URL, route, or method..."))}" />
+                    <button type="button" class="swp-nh-search-clear" title="${escapeHtml(t("clearSearch", "Clear search"))}" style="display:none;">✕</button>
                 </div>
 
                 <div class="swp-nh-filter-chips">
-                    <button type="button" class="swp-nh-chip is-active" data-status-filter="all">Tutti</button>
+                    <button type="button" class="swp-nh-chip is-active" data-status-filter="all">${escapeHtml(t("filterAll", "All"))}</button>
                     <button type="button" class="swp-nh-chip swp-nh-chip--2xx" data-status-filter="2xx">🟢 2xx</button>
                     <button type="button" class="swp-nh-chip swp-nh-chip--4xx" data-status-filter="4xx">🟡 4xx</button>
                     <button type="button" class="swp-nh-chip swp-nh-chip--5xx" data-status-filter="5xx">🔴 5xx</button>
@@ -1318,8 +1416,8 @@
                         <line x1="12" y1="8" x2="12" y2="12"></line>
                         <line x1="12" y1="16" x2="12.01" y2="16"></line>
                     </svg>
-                    <p>No network calls recorded${state.searchFilter ? " matching current filter" : ""}.</p>
-                    <span>Esegui una richiesta su Swagger UI per visualizzarla qui in tempo reale.</span>
+                    <p>${t("emptyTitle", `No network calls recorded${state.searchFilter ? " matching current filter" : ""}.`, { filterSuffix: state.searchFilter ? t("emptyFilterSuffix", " matching current filter") : "" })}</p>
+                    <span>${t("emptyDesc", "Execute a request in Swagger UI to view it here in real time.")}</span>
                 </div>
             `;
             return;
@@ -1345,19 +1443,19 @@
 
                         <div class="swp-nh-card-meta-row">
                             <div class="swp-nh-meta-badges">
-                                <span class="swp-nh-badge swp-nh-badge--time" title="Orario">${item.timeFormatted}</span>
-                                <span class="swp-nh-badge swp-nh-badge--latency swp-nh-badge--${latencyClass}" title="Latenza">⏱ ${item.durationMs} ms</span>
-                                <span class="swp-nh-badge swp-nh-badge--size" title="Dimensione">📦 ${item.sizeFormatted}</span>
+                                <span class="swp-nh-badge swp-nh-badge--time" title="${escapeHtml(t("time", "Time"))}">${item.timeFormatted}</span>
+                                <span class="swp-nh-badge swp-nh-badge--latency swp-nh-badge--${latencyClass}" title="${escapeHtml(t("latency", "Latency"))}">⏱ ${item.durationMs} ms</span>
+                                <span class="swp-nh-badge swp-nh-badge--size" title="${escapeHtml(t("size", "Size"))}">📦 ${item.sizeFormatted}</span>
                             </div>
 
                             <div class="swp-nh-card-actions">
-                                <button type="button" class="swp-nh-btn-replay" data-action="replay" data-item-id="${item.id}" title="Replay call immediately with smooth scroll and auto-execute">
-                                    🔄 Replay
+                                <button type="button" class="swp-nh-btn-replay" data-action="replay" data-item-id="${item.id}" title="${escapeHtml(t("replayTitle", "Replay call immediately with smooth scroll and auto-execute"))}">
+                                    🔄 ${escapeHtml(t("replay", "Replay"))}
                                 </button>
-                                <button type="button" class="swp-nh-btn-restore" data-action="restore" data-item-id="${item.id}" title="Populate parameters into form without executing">
-                                    ↺ Ripristina
+                                <button type="button" class="swp-nh-btn-restore" data-action="restore" data-item-id="${item.id}" title="${escapeHtml(t("restoreTitle", "Populate parameters into form without executing"))}">
+                                    ↺ ${escapeHtml(t("restore", "Restore"))}
                                 </button>
-                                <button type="button" class="swp-nh-btn-toggle" data-action="toggle" data-item-id="${item.id}" title="Dettagli payload">
+                                <button type="button" class="swp-nh-btn-toggle" data-action="toggle" data-item-id="${item.id}" title="${escapeHtml(t("detailsTitle", "Payload details"))}">
                                     ${isExpanded ? "▲" : "▼"}
                                 </button>
                             </div>
@@ -1414,10 +1512,10 @@
                 <!-- Tab Selector -->
                 <div class="swp-nh-tabs">
                     <button type="button" class="swp-nh-tab ${isRequestTab ? "is-active" : ""}" data-tab="request" data-item-id="${item.id}">
-                        Richiesta (Request)
+                        ${escapeHtml(t("tabRequest", "Request"))}
                     </button>
                     <button type="button" class="swp-nh-tab ${!isRequestTab ? "is-active" : ""}" data-tab="response" data-item-id="${item.id}">
-                        Risposta (Response)
+                        ${escapeHtml(t("tabResponse", "Response"))}
                     </button>
                 </div>
 
@@ -1425,18 +1523,18 @@
                 <div class="swp-nh-tab-content" style="display: ${isRequestTab ? "block" : "none"};">
                     <div class="swp-nh-detail-actions">
                         <button type="button" class="swp-nh-btn-copy" data-action="copy-curl" data-item-id="${item.id}">
-                            📋 Copia cURL
+                            ${escapeHtml(t("copyCurl", "📋 Copy cURL"))}
                         </button>
                         <button type="button" class="swp-nh-btn-copy" data-action="copy-url" data-item-id="${item.id}">
-                            🔗 Copia URL
+                            ${escapeHtml(t("copyUrl", "🔗 Copy URL"))}
                         </button>
                     </div>
 
                     ${queryParamsHtml}
 
                     <div class="swp-nh-detail-section">
-                        <span class="swp-nh-detail-label">Payload Inviato (Body):</span>
-                        <pre class="swp-nh-code-block">${escapeHtml(formattedReqBody || "(No request body sent)")}</pre>
+                        <span class="swp-nh-detail-label">${escapeHtml(t("sentPayload", "Sent Payload (Body):"))}</span>
+                        <pre class="swp-nh-code-block">${escapeHtml(formattedReqBody || t("noBodySent", "(No request body sent)"))}</pre>
                     </div>
                 </div>
 
@@ -1444,13 +1542,13 @@
                 <div class="swp-nh-tab-content" style="display: ${!isRequestTab ? "block" : "none"};">
                     <div class="swp-nh-detail-actions">
                         <button type="button" class="swp-nh-btn-copy" data-action="copy-response" data-item-id="${item.id}">
-                            📋 Copia JSON Risposta
+                            ${escapeHtml(t("copyResponse", "📋 Copy Response JSON"))}
                         </button>
                     </div>
 
                     <div class="swp-nh-detail-section">
-                        <span class="swp-nh-detail-label">Stato: ${item.status} ${escapeHtml(item.statusText)} (${item.durationMs} ms, ${item.sizeFormatted})</span>
-                        <pre class="swp-nh-code-block">${escapeHtml(formattedResBody || "(Risposta vuota)")}</pre>
+                        <span class="swp-nh-detail-label">${escapeHtml(t("status", "Status"))}: ${item.status} ${escapeHtml(item.statusText)} (${item.durationMs} ms, ${item.sizeFormatted})</span>
+                        <pre class="swp-nh-code-block">${escapeHtml(formattedResBody || t("emptyResponse", "(Empty response)"))}</pre>
                     </div>
                 </div>
             </div>
@@ -2240,6 +2338,26 @@
         }, 150);
 
         window.addEventListener("swagger-activity-bar:ready", registerGuideDocumentation);
+        window.addEventListener("swagger-i18n:locale-changed", () => {
+            registerGuideDocumentation(true);
+            const drawer = document.getElementById(CONFIG.ELEMENT_IDS.DRAWER);
+            if (drawer) {
+                const title = drawer.querySelector(".swp-nh-title");
+                if (title) title.textContent = t("drawerTitle", "Network History");
+                const clearBtnSpan = drawer.querySelector(`#${CONFIG.ELEMENT_IDS.CLEAR_BTN} span`);
+                if (clearBtnSpan) clearBtnSpan.textContent = t("clearBtn", "Clear");
+                const searchInput = drawer.querySelector(`#${CONFIG.ELEMENT_IDS.SEARCH_INPUT}`);
+                if (searchInput) searchInput.placeholder = t("searchPlaceholder", "Filter by URL, route, or method...");
+                const allChip = drawer.querySelector('.swp-nh-chip[data-status-filter="all"]');
+                if (allChip) allChip.textContent = t("filterAll", "All");
+                renderHistoryList();
+            }
+            if (window.SwaggerActivityBar && typeof window.SwaggerActivityBar.updateItem === "function") {
+                window.SwaggerActivityBar.updateItem("network-history", {
+                    title: t("activityBarTitle", "Open / Close Network Call History")
+                });
+            }
+        });
     }
 
     let isGuideRegistered = false;
@@ -2247,8 +2365,8 @@
     /**
      * Publishes plugin metadata and documentation to interactive Activity Bar guide.
      */
-    function registerGuideDocumentation() {
-        if (isGuideRegistered) return;
+    function registerGuideDocumentation(force = false) {
+        if (isGuideRegistered && !force) return;
         if (window.SwaggerActivityBar && typeof window.SwaggerActivityBar.registerPluginGuide === "function") {
             isGuideRegistered = true;
             window.SwaggerActivityBar.registerPluginGuide({
@@ -2268,7 +2386,17 @@
                         <polyline points="12 6 12 12 16 14"></polyline>
                     </svg>
                 `,
-                manual: `
+                i18n: {
+                    en: {
+                        name: "Network History, Metrics & Replay",
+                        description: "Intercepts HTTP calls with inline latency and payload badges, persistent circular buffer, and instant 1-click request replay.",
+                        shortcuts: [
+                            "Esc: Close slide-out drawer",
+                            "Click Card: Expand Request and Response details",
+                            "Replay: Scroll, populate form, and execute call",
+                            "Restore: Populate form fields without executing"
+                        ],
+                        manual: `
 ### Overview
 The plugin transparently intercepts all HTTP requests executed by Swagger UI. For every completed request, it measures actual latency in milliseconds (\`⏱ ms\`) and payload size (\`📦 KB\`).
 
@@ -2288,6 +2416,38 @@ Clicking the clock icon in the Activity Bar opens the right-hand slide-out drawe
 - **[🔄 Replay]**: unfolds parent controller, centers endpoint with glow animation, populates parameters/body, and triggers \`Execute\`.
 - **[↺ Restore]**: populates parameters and body into the form without executing, allowing manual review and edits.
 `
+                    },
+                    it: {
+                        name: "Cronologia Chiamate, Metriche & Replay",
+                        description: "Intercetta le chiamate HTTP con badge inline di latenza e payload, buffer circolare persistente e replay istantaneo con 1 click.",
+                        shortcuts: [
+                            "Esc: Chiude il drawer laterale",
+                            "Click Card: Espande i dettagli di Request e Response",
+                            "Replay: Scorre, compila ed esegue la chiamata",
+                            "Ripristina: Compila i campi senza inviare"
+                        ],
+                        manual: `
+### Panoramica
+Il plugin intercetta in modo trasparente tutte le richieste HTTP eseguite da Swagger UI. Per ogni chiamata completata misura la latenza reale in millisecondi (\`⏱ ms\`) e la dimensione del payload (\`📦 KB\`).
+
+### Metriche Inline
+Accanto all'intestazione **Server response** di ogni endpoint compare un badge con feedback a colori:
+- 🟢 **Verde (< 500 ms)**: risposta rapida.
+- 🟡 **Giallo (500 - 1500 ms)**: latenza intermedia.
+- 🔴 **Rosso (> 1500 ms)**: query complessa o lenta.
+
+### Drawer Cronologia
+Cliccando l'icona dell'orologio nell'Activity Bar si apre il cassetto laterale destro:
+- **Buffer circolare**: memorizza fino a 50 chiamate in \`localStorage\` per preservare lo storico tra ricaricamenti della pagina (\`F5\`).
+- **Filtri rapidi**: ricerca per percorso/metodo e chip per status code (\`2xx\`, \`4xx\`, \`5xx\`).
+- **Dettagli completi**: visualizza parametri di query, payload inviato, header e risposta con pulsanti \`Copia cURL\` e \`Copia JSON\`.
+
+### Motore Replay & Ripristino
+- **[🔄 Replay]**: espande automaticamente il controller se collassato, centra la barra dell'endpoint con effetto luminoso Glow, compila parametri e body e preme \`Execute\`.
+- **[↺ Ripristina]**: compila tutti i campi lasciando all'utente la libertà di modificarli prima dell'invio manuale.
+`
+                    }
+                }
             });
         }
     }

@@ -8,6 +8,77 @@
     const LONG_STRING_THRESHOLD = typeof userConfig.truncateStringLength === "number" ? userConfig.truncateStringLength : 250;
     const TRUNCATE_PREVIEW_LENGTH = Math.min(120, Math.max(30, Math.floor(LONG_STRING_THRESHOLD / 2)));
 
+    // =========================================================================
+    // 1.1 INTERNATIONALIZATION (i18n) ENGINE & DICTIONARIES
+    // =========================================================================
+    const I18N = {
+        en: {
+            expandAll: "Expand all",
+            collapseAll: "Collapse all",
+            copy: "Copy",
+            download: "Download",
+            downloadTitle: "Download JSON payload (.json)",
+            raw: "Raw",
+            pretty: "Pretty JSON",
+            showAll: "Show all",
+            collapse: "Collapse",
+            showFull: "Show full",
+            copiedFeedback: "✓ Copied!",
+            copyPropertyTitle: "Copy property value"
+        },
+        it: {
+            expandAll: "Espandi tutto",
+            collapseAll: "Collassa tutto",
+            copy: "Copia",
+            download: "Scarica",
+            downloadTitle: "Scarica payload JSON (.json)",
+            raw: "Grezzo",
+            pretty: "JSON formattato",
+            showAll: "Mostra tutto",
+            collapse: "Collassa",
+            showFull: "Mostra tutto",
+            copiedFeedback: "✓ Copiato!",
+            copyPropertyTitle: "Copia valore proprietà"
+        }
+    };
+
+    /**
+     * Resolves the active language code.
+     * @returns {"en"|"it"}
+     */
+    function getActiveLocale() {
+        const stored = localStorage.getItem("swp_swagger_i18n_locale");
+        if (stored === "it" || stored === "en") return stored;
+        if (userConfig.locale === "it" || userConfig.locale === "en") return userConfig.locale;
+        if (window.SwaggerI18nConfig && (window.SwaggerI18nConfig.locale === "it" || window.SwaggerI18nConfig.locale === "en")) {
+            return window.SwaggerI18nConfig.locale;
+        }
+        if (window.SwaggerI18nConfig && window.SwaggerI18nConfig.autoDetect && typeof document !== "undefined") {
+            const docLang = (document.documentElement.lang || "").toLowerCase();
+            if (docLang.startsWith("it")) return "it";
+        }
+        return "en";
+    }
+
+    /**
+     * Translates a message key into current locale with parameter substitution and fallback.
+     */
+    function t(key, defaultText, params = {}) {
+        const locale = getActiveLocale();
+        const hostOverrides = (window.SwaggerI18nConfig && window.SwaggerI18nConfig.messages && window.SwaggerI18nConfig.messages[locale]) ||
+                              (userConfig.messages && userConfig.messages[locale]);
+        let str = (hostOverrides && hostOverrides[key]) ||
+                  (I18N[locale] && I18N[locale][key]) ||
+                  (I18N["en"] && I18N["en"][key]) ||
+                  defaultText;
+        if (params && typeof params === "object") {
+            for (const [k, v] of Object.entries(params)) {
+                str = str.replace(new RegExp(`\\{${k}\\}`, "g"), v);
+            }
+        }
+        return str;
+    }
+
     const ROOT_CLASS = "custom-json-view";
     const STYLE_ID = "custom-json-view-style";
 
@@ -433,7 +504,7 @@
 
             const sizeKB = (value.length / 1024).toFixed(1);
             const sizeLabel = parseFloat(sizeKB) > 0 ? `${sizeKB} KB` : `${value.length} car.`;
-            toggleBtn.textContent = `[+ ${sizeLabel} - Show all]`;
+            toggleBtn.textContent = `[+ ${sizeLabel} - ${t("showAll", "Show all")}]`;
             toggleBtn.title = "Espandi/Comprimi testo completo";
 
             toggleBtn.addEventListener("click", (e) => {
@@ -442,10 +513,10 @@
                 isExpanded = !isExpanded;
                 if (isExpanded) {
                     textSpan.textContent = escaped;
-                    toggleBtn.textContent = "[Collapse]";
+                    toggleBtn.textContent = `[${t("collapse", "Collapse")}]`;
                 } else {
                     textSpan.textContent = truncatedEscaped;
-                    toggleBtn.textContent = `[+ ${sizeLabel} - Show full]`;
+                    toggleBtn.textContent = `[+ ${sizeLabel} - ${t("showFull", "Show full")}]`;
                 }
             });
 
@@ -500,7 +571,7 @@
         btn.type = "button";
         btn.className = `${ROOT_CLASS}__copy-btn`;
         btn.title = tooltip;
-        btn.textContent = "Copy";
+        btn.textContent = t("copy", "Copy");
         btn.setAttribute("aria-label", tooltip);
 
         btn.addEventListener("click", (e) => {
@@ -730,7 +801,7 @@
         let timerId = null;
 
         const setFeedback = (msg) => {
-            button.textContent = msg;
+            button.textContent = t("copiedFeedback", msg || "✓ Copied!");
             if (timerId) {
                 window.clearTimeout(timerId);
             }
@@ -1043,29 +1114,29 @@
 
         const expandButton = document.createElement("button");
         expandButton.type = "button";
-        expandButton.className = `${ROOT_CLASS}__button`;
-        expandButton.textContent = "Expand all";
+        expandButton.className = `${ROOT_CLASS}__button btn-expand-all`;
+        expandButton.textContent = t("expandAll", "Expand all");
 
         const collapseButton = document.createElement("button");
         collapseButton.type = "button";
-        collapseButton.className = `${ROOT_CLASS}__button`;
-        collapseButton.textContent = "Collapse all";
+        collapseButton.className = `${ROOT_CLASS}__button btn-collapse-all`;
+        collapseButton.textContent = t("collapseAll", "Collapse all");
 
         const copyButton = document.createElement("button");
         copyButton.type = "button";
-        copyButton.className = `${ROOT_CLASS}__button`;
-        copyButton.textContent = "Copy";
+        copyButton.className = `${ROOT_CLASS}__button btn-copy-all`;
+        copyButton.textContent = t("copy", "Copy");
 
         const downloadButton = document.createElement("button");
         downloadButton.type = "button";
-        downloadButton.className = `${ROOT_CLASS}__button`;
-        downloadButton.textContent = "Download";
-        downloadButton.title = "Download JSON payload (.json)";
+        downloadButton.className = `${ROOT_CLASS}__button btn-download-all`;
+        downloadButton.textContent = t("download", "Download");
+        downloadButton.title = t("downloadTitle", "Download JSON payload (.json)");
 
         const originalButton = document.createElement("button");
         originalButton.type = "button";
-        originalButton.className = `${ROOT_CLASS}__button`;
-        originalButton.textContent = "Raw";
+        originalButton.className = `${ROOT_CLASS}__button btn-toggle-raw`;
+        originalButton.textContent = t("raw", "Raw");
         originalButton.setAttribute(
             "aria-pressed",
             "false"
@@ -1112,7 +1183,7 @@
             copyButton.hidden = false;
             downloadButton.hidden = false;
 
-            originalButton.textContent = "Raw";
+            originalButton.textContent = t("raw", "Raw");
             originalButton.setAttribute(
                 "aria-pressed",
                 "false"
@@ -1137,7 +1208,7 @@
             copyButton.hidden = false;
             downloadButton.hidden = false;
 
-            originalButton.textContent = "JSON formattato";
+            originalButton.textContent = t("pretty", "Pretty JSON");
             originalButton.setAttribute(
                 "aria-pressed",
                 "true"
@@ -1344,6 +1415,28 @@
         scan();
         registerGuideDocumentation();
         window.addEventListener("swagger-activity-bar:ready", registerGuideDocumentation);
+            window.addEventListener("swagger-i18n:locale-changed", () => {
+                registerGuideDocumentation(true);
+                // Aggiorna le toolbar dei visualizzatori JSON renderizzati
+                document.querySelectorAll(".custom-json-view").forEach((viewer) => {
+                    const btnExpand = viewer.querySelector(".btn-expand-all");
+                    if (btnExpand) btnExpand.textContent = t("expandAll", "Expand all");
+                    const btnCollapse = viewer.querySelector(".btn-collapse-all");
+                    if (btnCollapse) btnCollapse.textContent = t("collapseAll", "Collapse all");
+                    const btnCopy = viewer.querySelector(".btn-copy-all");
+                    if (btnCopy) btnCopy.textContent = t("copy", "Copy");
+                    const btnDownload = viewer.querySelector(".btn-download-all");
+                    if (btnDownload) {
+                        btnDownload.textContent = t("download", "Download");
+                        btnDownload.title = t("downloadTitle", "Download JSON payload (.json)");
+                    }
+                    const btnRaw = viewer.querySelector(".btn-toggle-raw");
+                    if (btnRaw) {
+                        const isRaw = btnRaw.getAttribute("aria-pressed") === "true";
+                        btnRaw.textContent = isRaw ? t("pretty", "Pretty JSON") : t("raw", "Raw");
+                    }
+                });
+            });
     }
 
     let isGuideRegistered = false;
@@ -1351,21 +1444,21 @@
     /**
      * Publishes plugin metadata and documentation to the interactive Activity Bar guide.
      */
-    function registerGuideDocumentation() {
-        if (isGuideRegistered) return;
+    function registerGuideDocumentation(force = false) {
+        if (isGuideRegistered && !force) return;
         if (window.SwaggerActivityBar && typeof window.SwaggerActivityBar.registerPluginGuide === "function") {
             isGuideRegistered = true;
             window.SwaggerActivityBar.registerPluginGuide({
                 id: "pretty-json-view",
-                name: "Pretty JSON & Tree View",
+                name: "Interactive Pretty JSON Viewer",
                 version: "1.0.0",
-                description: "Interactive collapsible tree viewer for JSON payloads with HTTP method color-coding, copy, download, and raw toggle.",
+                description: "Collapsible tree view for JSON responses in Swagger UI with syntax highlighting, search/filter, node path breadcrumbs, and clipboard export.",
                 shortcuts: [
-                    "Expand all: Open all nested nodes and objects",
-                    "Collapse all: Close all child nodes",
-                    "Copy: Copy formatted JSON to clipboard",
-                    "Download: Save payload as .json file",
-                    "Raw: Toggle between interactive tree and raw Swagger text"
+                    "Expand all: Unfold all nested objects and arrays",
+                    "Collapse all: Fold all nodes back to root level",
+                    "Copy: Copy entire formatted JSON to clipboard",
+                    "Download: Export payload as .json file",
+                    "Raw / Pretty: Toggle between interactive tree and native text"
                 ],
                 iconHtml: `
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1373,18 +1466,50 @@
                         <polyline points="8 6 2 12 8 18"/>
                     </svg>
                 `,
-                manual: `
+                i18n: {
+                    en: {
+                        name: "Interactive Pretty JSON Viewer",
+                        description: "Collapsible tree view for JSON responses in Swagger UI with syntax highlighting, search/filter, node path breadcrumbs, and clipboard export.",
+                        shortcuts: [
+                            "Expand all: Unfold all nested objects and arrays",
+                            "Collapse all: Fold all nodes back to root level",
+                            "Copy: Copy entire formatted JSON to clipboard",
+                            "Download: Export payload as .json file",
+                            "Raw / Pretty: Toggle between interactive tree and native text"
+                        ],
+                        manual: `
 ### Overview
-Enhances readability of JSON payloads in server responses and Swagger UI documentation examples.
+Transforms flat, static JSON response strings into a modern, foldable tree with syntax highlighting and quick-action toolbar.
 
-### Features
-- **Interactive Tree**: navigate and expand nested objects, arrays, and primitive values.
-- **HTTP Method Color Theme**: the viewer toolbar matches HTTP method colors (\`GET\` blue, \`POST\` green, \`PUT\` orange, \`DELETE\` red).
-- **Toolbar Actions**:
-  - **Expand / Collapse all**: instant control over large response trees.
-  - **Copy & Download**: 1-click clipboard copy or download as \`.json\`.
-  - **Raw Toggle**: switch back and forth to Swagger's original raw text representation.
+### Key Capabilities
+- **Tree Navigation**: click disclosure arrows (\`▶\` / \`▼\`) to collapse or expand individual nested objects or arrays.
+- **Node Actions**: hover any property to copy its specific value or full JSONPath.
+- **Large Strings Handling**: automatic truncation with \`[+ Show all]\` preview to prevent UI lag on base64 data.
+- **Export**: download formatted JSON directly as a \`.json\` file.
 `
+                    },
+                    it: {
+                        name: "Visualizzatore JSON Interattivo",
+                        description: "Albero collassabile per le risposte JSON in Swagger UI con syntax highlighting, breadcrumb dei path ed esportazione rapida.",
+                        shortcuts: [
+                            "Espandi tutto: Apre tutti i nodi di oggetti e array",
+                            "Collassa tutto: Richiude la vista al livello radice",
+                            "Copia: Copia l'intero payload JSON negli appunti",
+                            "Scarica: Salva il file .json sul disco",
+                            "Grezzo / Formattato: Alterna tra vista ad albero e testo Swagger nativo"
+                        ],
+                        manual: `
+### Panoramica
+Trasforma i lunghi blocchi di testo JSON statici di Swagger UI in un albero esplorabile con evidenziazione sintattica colorata e barra delle azioni rapide.
+
+### Funzionalità Principali
+- **Navigazione ad Albero**: clicca sulle frecce (\`▶\` / \`▼\`) per espandere o collassare selettivamente sotto-alberi.
+- **Azioni sui Nodi**: passando il mouse su qualsiasi proprietà compare il pulsante per copiare il singolo valore o il path JSON.
+- **Stringhe Lunghe**: troncamento intelligente con anteprima \`[+ Mostra tutto]\` per stringhe Base64 o token pesanti.
+- **Esportazione**: salvataggio istantaneo del JSON in formato file \`.json\` con 1 click.
+`
+                    }
+                }
             });
         }
     }

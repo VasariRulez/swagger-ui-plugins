@@ -55,6 +55,103 @@
     };
 
     // =========================================================================
+    // =========================================================================
+    // 1.1 INTERNATIONALIZATION (i18n) ENGINE & DICTIONARIES
+    // =========================================================================
+    const I18N = {
+        en: {
+            toolbarTitle: "🧩 DTO Presets:",
+            selectPlaceholder: "-- Select a DTO Preset --",
+            applyBtn: "✓ Apply",
+            applyBtnTitle: "Apply selected payload into request body textarea",
+            copyBtn: "📋 Copy",
+            copyBtnTitle: "Copy selected JSON payload to clipboard",
+            saveBtn: "💾 Save",
+            saveBtnTitle: "Save current textarea contents as a custom preset",
+            deleteBtn: "✕ Delete",
+            deleteBtnTitle: "Delete selected custom preset",
+            selectFirstAlert: "Please select a preset from the dropdown first.",
+            payloadInserted: "✓ Payload applied!",
+            copied: "📋 Copied!",
+            saved: "💾 Saved!",
+            emptyBodyAlert: "Request body textarea is empty. Enter or edit valid JSON first.",
+            invalidJsonAlert: "Textarea content is not valid JSON.",
+            presetNamePrompt: "Enter a name for this custom preset:",
+            presetDefaultName: "My custom preset",
+            deleteConfirm: "Delete custom preset \"{name}\"?",
+            groupHost: "Predefined Host Presets",
+            groupPolymorphic: "Polymorphic Variants",
+            groupAuto: "OpenAPI Auto Templates",
+            groupCustom: "Saved Custom Presets",
+            autoMinimal: "⚡ Automatic Minimal (Required only)",
+            autoFull: "✨ Automatic Full (All fields mock)"
+        },
+        it: {
+            toolbarTitle: "🧩 Preset DTO:",
+            selectPlaceholder: "-- Seleziona un Preset DTO --",
+            applyBtn: "✓ Applica",
+            applyBtnTitle: "Inserisce il payload selezionato nella textarea del body",
+            copyBtn: "📋 Copia",
+            copyBtnTitle: "Copia il payload JSON selezionato negli appunti",
+            saveBtn: "💾 Salva",
+            saveBtnTitle: "Salva il contenuto corrente della textarea come preset personalizzato",
+            deleteBtn: "✕ Elimina",
+            deleteBtnTitle: "Elimina il preset personalizzato selezionato",
+            selectFirstAlert: "Seleziona prima un preset dal menu a tendina.",
+            payloadInserted: "✓ Payload inserito!",
+            copied: "📋 Copiato!",
+            saved: "💾 Salvato!",
+            emptyBodyAlert: "La textarea del body è vuota. Inserisci o modifica prima un JSON valido.",
+            invalidJsonAlert: "Il contenuto della textarea non è un JSON valido.",
+            presetNamePrompt: "Inserisci un nome per questo preset personalizzato:",
+            presetDefaultName: "Mio preset di test",
+            deleteConfirm: "Eliminare il preset personalizzato \"{name}\"?",
+            groupHost: "Preset Predefiniti Host",
+            groupPolymorphic: "Varianti Polimorfiche",
+            groupAuto: "Template Automatici OpenAPI",
+            groupCustom: "I Miei Preset Personalizzati",
+            autoMinimal: "⚡ Automatico Minimale (Solo campi obbligatori)",
+            autoFull: "✨ Automatico Completo (Tutti i campi mockati)"
+        }
+    };
+
+    /**
+     * Resolves the active language code.
+     * @returns {"en"|"it"}
+     */
+    function getActiveLocale() {
+        const stored = localStorage.getItem("swp_swagger_i18n_locale");
+        if (stored === "it" || stored === "en") return stored;
+        if (userConfig.locale === "it" || userConfig.locale === "en") return userConfig.locale;
+        if (window.SwaggerI18nConfig && (window.SwaggerI18nConfig.locale === "it" || window.SwaggerI18nConfig.locale === "en")) {
+            return window.SwaggerI18nConfig.locale;
+        }
+        if (window.SwaggerI18nConfig && window.SwaggerI18nConfig.autoDetect && typeof document !== "undefined") {
+            const docLang = (document.documentElement.lang || "").toLowerCase();
+            if (docLang.startsWith("it")) return "it";
+        }
+        return "en";
+    }
+
+    /**
+     * Translates a message key into current locale with parameter substitution and fallback.
+     */
+    function t(key, defaultText, params = {}) {
+        const locale = getActiveLocale();
+        const hostOverrides = (window.SwaggerI18nConfig && window.SwaggerI18nConfig.messages && window.SwaggerI18nConfig.messages[locale]) ||
+                              (userConfig.messages && userConfig.messages[locale]);
+        let str = (hostOverrides && hostOverrides[key]) ||
+                  (I18N[locale] && I18N[locale][key]) ||
+                  (I18N["en"] && I18N["en"][key]) ||
+                  defaultText;
+        if (params && typeof params === "object") {
+            for (const [k, v] of Object.entries(params)) {
+                str = str.replace(new RegExp(`\\{${k}\\}`, "g"), v);
+            }
+        }
+        return str;
+    }
+
     // 2. FUNZIONI DI UTILITÀ (DOM, String, React State Setter)
     // =========================================================================
 
@@ -581,7 +678,7 @@
                 presets.push({
                     id: `global_${idx}_${Date.now()}`,
                     label: `🌐 ${gp.name || 'Predefined Preset'}`,
-                    group: "Predefined Host Presets",
+                    group: t("groupHost", "Predefined Host Presets"),
                     payload: gp.payload,
                     isCustom: false,
                     isGlobal: true
@@ -609,7 +706,7 @@
                     presets.push({
                         id: `poly_${slot.propertyName}_${variant.discriminatorVal}`,
                         label: `${variant.label} (${slot.propertyName})`,
-                        group: "Polymorphic Variants",
+                        group: t("groupPolymorphic", "Polymorphic Variants"),
                         payload: payload,
                         isCustom: false
                     });
@@ -622,7 +719,7 @@
         presets.push({
             id: "standard_full",
             label: "Full Sample (All Fields)",
-            group: "OpenAPI Auto Templates",
+            group: t("groupAuto", "OpenAPI Auto Templates"),
             payload: fullPayload,
             isCustom: false
         });
@@ -632,7 +729,7 @@
             presets.push({
                 id: "standard_minimal",
                 label: "Minimal Required Fields",
-                group: "OpenAPI Auto Templates",
+                group: t("groupAuto", "OpenAPI Auto Templates"),
                 payload: minimalPayload,
                 isCustom: false
             });
@@ -644,7 +741,7 @@
             presets.push({
                 id: `custom_${custom.id}`,
                 label: `★ ${custom.name}`,
-                group: "Saved Custom Presets",
+                group: t("groupCustom", "Saved Custom Presets"),
                 payload: custom.payload,
                 isCustom: true,
                 rawCustomId: custom.id
@@ -944,7 +1041,7 @@
             groups[p.group].push(p);
         });
 
-        let optionsHtml = `<option value="">-- Seleziona un Preset DTO --</option>`;
+        let optionsHtml = `<option value="">${t("selectPlaceholder", "-- Select a DTO Preset --")}</option>`;
         for (const [groupName, items] of Object.entries(groups)) {
             optionsHtml += `<optgroup label="${escapeHtml(groupName)}">`;
             for (const item of items) {
@@ -954,21 +1051,21 @@
         }
 
         toolbar.innerHTML = `
-            <span class="swagger-presets-title">🧩 DTO Presets:</span>
+            <span class="swagger-presets-title">${t("toolbarTitle", "🧩 DTO Presets:")}</span>
             <select class="swagger-presets-select" title="Select a polymorphic variant, predefined preset, or saved favorite">
                 ${optionsHtml}
             </select>
-            <button type="button" class="swagger-presets-btn swagger-presets-btn-primary btn-apply" title="Apply selected payload into request body textarea">
-                ✓ Apply
+            <button type="button" class="swagger-presets-btn swagger-presets-btn-primary btn-apply" title="${t("applyBtnTitle", "Apply selected payload into request body textarea")}">
+                ${t("applyBtn", "✓ Apply")}
             </button>
-            <button type="button" class="swagger-presets-btn btn-copy" title="Copy selected JSON payload to clipboard">
-                📋 Copy
+            <button type="button" class="swagger-presets-btn btn-copy" title="${t("copyBtnTitle", "Copy selected JSON payload to clipboard")}">
+                ${t("copyBtn", "📋 Copy")}
             </button>
-            <button type="button" class="swagger-presets-btn btn-save" title="Save current textarea contents as a custom preset">
-                💾 Save
+            <button type="button" class="swagger-presets-btn btn-save" title="${t("saveBtnTitle", "Save current textarea contents as a custom preset")}">
+                ${t("saveBtn", "💾 Save")}
             </button>
-            <button type="button" class="swagger-presets-btn btn-delete" style="display:none;" title="Delete selected custom preset">
-                ✕ Delete
+            <button type="button" class="swagger-presets-btn btn-delete" style="display:none;" title="${t("deleteBtnTitle", "Delete selected custom preset")}">
+                ${t("deleteBtn", "✕ Delete")}
             </button>
             <span class="swagger-presets-feedback"></span>
             <span class="swagger-presets-badge">OpenAPI</span>
@@ -1013,7 +1110,7 @@
         const applyPreset = () => {
             const preset = getSelectedPreset();
             if (!preset) {
-                alert("Seleziona prima un preset dal menu a tendina.");
+                alert(t("selectFirstAlert", "Please select a preset from the dropdown first."));
                 return;
             }
 
@@ -1034,7 +1131,7 @@
                 if (textarea) {
                     clearInterval(pollTextarea);
                     setReactTextareaValue(textarea, jsonText);
-                    showFeedback("✓ Payload inserito!");
+                    showFeedback(t("payloadInserted", "✓ Payload applied!"));
                 } else if (attempts >= 15) {
                     clearInterval(pollTextarea);
                     console.warn("[Swagger Presets] Unable to find request body textarea for this endpoint.");
@@ -1048,14 +1145,14 @@
         btnCopy.addEventListener("click", () => {
             const preset = getSelectedPreset();
             if (!preset) {
-                alert("Seleziona prima un preset dal menu.");
+                alert(t("selectFirstAlert", "Please select a preset from the dropdown first."));
                 return;
             }
 
             const jsonText = JSON.stringify(preset.payload, null, 2);
             navigator.clipboard
                 .writeText(jsonText)
-                .then(() => showFeedback("📋 Copiato!"))
+                .then(() => showFeedback(t("copied", "📋 Copied!")))
                 .catch(() => alert("Unable to copy to clipboard."));
         });
 
@@ -1065,7 +1162,7 @@
             const rawContent = textarea ? textarea.value.trim() : "";
 
             if (!rawContent) {
-                alert("La textarea del body è vuota. Inserisci o modifica prima un JSON valido.");
+                alert(t("emptyBodyAlert", "Request body textarea is empty. Enter or edit valid JSON first."));
                 return;
             }
 
@@ -1073,15 +1170,15 @@
             try {
                 parsed = JSON.parse(rawContent);
             } catch {
-                alert("Textarea content is not valid JSON.");
+                alert(t("invalidJsonAlert", "Textarea content is not valid JSON."));
                 return;
             }
 
-            const name = prompt("Enter a name for this custom preset:", "My test preset");
+            const name = prompt(t("presetNamePrompt", "Enter a name for this custom preset:"), t("presetDefaultName", "My custom preset"));
             if (!name || !name.trim()) return;
 
             saveCustomPresetForEndpoint(method, path, name.trim(), parsed);
-            showFeedback("💾 Salvato!");
+            showFeedback(t("saved", "💾 Saved!"));
 
             // Rebuild toolbar to show new preset
             toolbar.remove();
@@ -1093,7 +1190,7 @@
             const preset = getSelectedPreset();
             if (!preset || !preset.isCustom) return;
 
-            if (confirm(`Eliminare il preset personalizzato "${preset.label}"?`)) {
+            if (confirm(t("deleteConfirm", `Delete custom preset "${preset.label}"?`, { name: preset.label }))) {
                 deleteCustomPresetForEndpoint(method, path, preset.rawCustomId);
                 toolbar.remove();
                 mountToolbarInOpblock(opblock);
@@ -1137,6 +1234,12 @@
                 registerGuideDocumentation();
 
                 window.addEventListener("swagger-activity-bar:ready", registerGuideDocumentation);
+                window.addEventListener("swagger-i18n:locale-changed", () => {
+                    registerGuideDocumentation(true);
+                    // Rimuove e rimonta le toolbar negli opblock aperti per aggiornare i testi
+                    document.querySelectorAll(".swagger-presets-toolbar").forEach((tb) => tb.remove());
+                    scanAndMountToolbars();
+                });
 
                 // Observer to intercept dynamic opening of endpoints (.opblock.is-open)
                 const observer = new MutationObserver(() => {
@@ -1164,8 +1267,8 @@
     /**
      * Publishes plugin metadata and documentation to interactive Activity Bar guide.
      */
-    function registerGuideDocumentation() {
-        if (isGuideRegistered) return;
+    function registerGuideDocumentation(force = false) {
+        if (isGuideRegistered && !force) return;
         if (window.SwaggerActivityBar && typeof window.SwaggerActivityBar.registerPluginGuide === "function") {
             isGuideRegistered = true;
             window.SwaggerActivityBar.registerPluginGuide({
@@ -1187,7 +1290,16 @@
                         <polyline points="10 9 9 9 8 9"/>
                     </svg>
                 `,
-                manual: `
+                i18n: {
+                    en: {
+                        name: "DTO Presets & Polymorphic Mocks",
+                        description: "Automatic request body generator for polymorphic schemas ($type/discriminators), predefined host presets, and custom developer favorites.",
+                        shortcuts: [
+                            "Preset Menu: Select DTO variant to insert into Request Body",
+                            "Save Preset: Save custom payload to local favorites",
+                            "Reset: Restore initial Swagger schema template"
+                        ],
+                        manual: `
 ### Overview
 Solves the challenge of polymorphic DTO hierarchies (such as schemas with discriminator \`$type\` and multiple subtypes) where standard Swagger UI only shows base model fields.
 
@@ -1197,6 +1309,27 @@ When expanding an endpoint with a JSON request body:
 2. Select any desired subtype or template: payload is instantly populated with all specific subtype fields and realistic mock values.
 3. Save recurring configurations using the **"Save"** button into local browser storage.
 `
+                    },
+                    it: {
+                        name: "Preset DTO & Mock Polimorfici",
+                        description: "Generatore automatico di payload per gerarchie polimorfiche ($type/discriminator), preset predefiniti e preferiti personalizzati.",
+                        shortcuts: [
+                            "Menu Preset: Seleziona la variante DTO da applicare al Body",
+                            "Salva Preset: Memorizza il payload attuale nei preferiti locali",
+                            "Ripristina: Ricarica il template di default OpenAPI"
+                        ],
+                        manual: `
+### Panoramica
+Risolve il problema delle gerarchie polimorfiche OpenAPI (es. discriminator \`$type\` o \`discriminator.propertyName\`), dove Swagger UI nativo mostra solo i campi dell'interfaccia base.
+
+### Come si Usa
+Espandendo un endpoint dotato di request body JSON:
+1. Sopra il corpo della richiesta compare la barra degli strumenti con il menu **"Preset DTO"**.
+2. Selezionando un sottotipo polimorfico o un template, il body viene compilato con tutti i campi del tipo derivato valorizzati con mock realistici.
+3. Con il pulsante **"Salva"** è possibile memorizzare payload personalizzati nello storage del browser per riutilizzarli in qualsiasi momento.
+`
+                    }
+                }
             });
         }
     }

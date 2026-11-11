@@ -55,6 +55,120 @@
     };
 
     // =========================================================================
+    // 1.1 INTERNATIONALIZATION (i18n) ENGINE & LOCALE STATE
+    // =========================================================================
+    const I18N = {
+        en: {
+            "activityBar.title": "Swagger UI Plugins Suite — Extensions & Interactive Guide",
+            "activityBar.aria": "Plugins and Interactive Guide",
+            "langSwitcher.titleManual": "Language: {locale} (Saved in LocalStorage). Click to change or reset.",
+            "langSwitcher.titleAuto": "Language: Auto / Config ({locale}). Click to change.",
+            "langSwitcher.aria": "Language Switcher and Settings",
+            "langPopover.title": "Language / Lingua",
+            "langPopover.manualBadge": "Manual",
+            "langPopover.autoBadge": "Config",
+            "langPopover.resetTitle": "Reset to Config (Auto)",
+            "langPopover.resetDesc": "Use plugin configs / host defaults",
+            "guide.headerTitle": "Swagger UI Plugins Suite — Extensions & Guide",
+            "guide.activeChip": "{count} active",
+            "guide.closeModal": "Close modal (Esc)",
+            "guide.emptyTitle": "No plugins have registered their guide yet.",
+            "guide.emptyDesc": "Suite plugins register their documentation via window.SwaggerActivityBar.registerPluginGuide().",
+            "guide.back": "← Back",
+            "guide.backTitle": "Return to plugins list",
+            "guide.shortcutsTitle": "Shortcuts & Quick Actions:"
+        },
+        it: {
+            "activityBar.title": "Suite Plugin Swagger UI — Estensioni e Guida Interattiva",
+            "activityBar.aria": "Plugin e Guida Interattiva",
+            "langSwitcher.titleManual": "Lingua: {locale} (Salvata in LocalStorage). Clicca per cambiare o ripristinare.",
+            "langSwitcher.titleAuto": "Lingua: Auto / Config ({locale}). Clicca per cambiare.",
+            "langSwitcher.aria": "Selettore e Impostazioni Lingua",
+            "langPopover.title": "Lingua / Language",
+            "langPopover.manualBadge": "Manuale",
+            "langPopover.autoBadge": "Config",
+            "langPopover.resetTitle": "Ripristina Config (Auto)",
+            "langPopover.resetDesc": "Usa configurazioni plugin o default host",
+            "guide.headerTitle": "Suite Plugin Swagger UI — Estensioni e Guida",
+            "guide.activeChip": "{count} attivi",
+            "guide.closeModal": "Chiudi modale (Esc)",
+            "guide.emptyTitle": "Nessun plugin ha ancora registrato la propria guida.",
+            "guide.emptyDesc": "I plugin della suite registrano la loro documentazione tramite window.SwaggerActivityBar.registerPluginGuide().",
+            "guide.back": "← Indietro",
+            "guide.backTitle": "Torna all'elenco dei plugin",
+            "guide.shortcutsTitle": "Scorciatoie e Azioni Rapide:"
+        }
+    };
+
+    function getActiveLocale() {
+        return (
+            localStorage.getItem("swp_swagger_i18n_locale") ||
+            (window.SwaggerActivityBarConfig && window.SwaggerActivityBarConfig.locale) ||
+            (window.SwaggerI18nConfig && window.SwaggerI18nConfig.locale) ||
+            (window.SwaggerI18nConfig && window.SwaggerI18nConfig.autoDetect && document.documentElement.lang && document.documentElement.lang.slice(0, 2)) ||
+            "en"
+        );
+    }
+
+    function isLocaleOverridden() {
+        return Boolean(localStorage.getItem("swp_swagger_i18n_locale"));
+    }
+
+    function setActiveLocale(newLocale) {
+        if (!newLocale || typeof newLocale !== "string") return;
+        const normalized = newLocale.toLowerCase();
+        try {
+            localStorage.setItem("swp_swagger_i18n_locale", normalized);
+        } catch (_) {}
+        updateLanguageSwitcherButton();
+        updateSystemGuideButton();
+        window.dispatchEvent(new CustomEvent("swagger-i18n:locale-changed", { detail: { locale: normalized, isReset: false } }));
+        if (isGuideModalOpen) {
+            renderGuideModalContent();
+        }
+    }
+
+    function resetLocale() {
+        try {
+            localStorage.removeItem("swp_swagger_i18n_locale");
+        } catch (_) {}
+        updateLanguageSwitcherButton();
+        updateSystemGuideButton();
+        window.dispatchEvent(new CustomEvent("swagger-i18n:locale-changed", { detail: { locale: getActiveLocale(), isReset: true } }));
+        if (isGuideModalOpen) {
+            renderGuideModalContent();
+        }
+    }
+
+    function t(key, defaultText, params = {}) {
+        const locale = getActiveLocale();
+        const hostOverrides = window.SwaggerI18nConfig?.messages?.[locale] || window.SwaggerActivityBarConfig?.messages?.[locale];
+        let str = hostOverrides?.[key] || I18N[locale]?.[key] || I18N["en"]?.[key] || defaultText;
+        if (params && typeof params === "object") {
+            for (const [k, v] of Object.entries(params)) {
+                str = str.replace(new RegExp(`\\{${k}\\}`, "g"), v);
+            }
+        }
+        return str;
+    }
+
+    function getLocalizedGuide(guide, locale) {
+        if (guide.i18n && (guide.i18n[locale] || guide.i18n["en"])) {
+            const loc = guide.i18n[locale] || guide.i18n["en"];
+            return {
+                ...guide,
+                name: loc.name || guide.name,
+                description: loc.description || guide.description,
+                manual: loc.manual || guide.manual,
+                shortcuts: loc.shortcuts || guide.shortcuts,
+                version: loc.version || guide.version
+            };
+        }
+        return guide;
+    }
+
+
+    // =========================================================================
     // 2. IN-MEMORY REGISTRATION STATE
     // =========================================================================
     /** Registered Activity Bar items map: id -> options */
@@ -748,6 +862,93 @@
                 background: var(--guide-badge-bg);
                 font-size: 12px;
             }
+            /* --- LANGUAGE SWITCHER POPOVER --- */
+            .swp-lang-popover {
+                position: fixed;
+                left: ${CONFIG.BAR_WIDTH_PX + 8}px;
+                bottom: 46px;
+                z-index: ${CONFIG.Z_INDEX + 10};
+                min-width: 240px;
+                background: var(--guide-card-bg, #ffffff);
+                color: var(--guide-text, #1e293b);
+                border: 1px solid var(--guide-border, #cbd5e1);
+                border-radius: 8px;
+                box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+                padding: 6px;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                animation: swpLangFade 0.15s ease-out;
+            }
+
+            @keyframes swpLangFade {
+                from { opacity: 0; transform: translateY(6px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+
+            .swp-lang-popover-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 6px 8px 8px 8px;
+                font-size: 11px;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                color: var(--guide-text-muted, #64748b);
+                border-bottom: 1px solid var(--guide-border-light, #e2e8f0);
+                margin-bottom: 4px;
+            }
+
+            .swp-lang-badge-tag {
+                font-size: 9px;
+                font-weight: 700;
+                padding: 1px 6px;
+                border-radius: 4px;
+                text-transform: uppercase;
+                letter-spacing: 0.3px;
+            }
+            .swp-lang-badge-tag--manual {
+                background: #e0f2fe;
+                color: #0369a1;
+            }
+            .swp-lang-badge-tag--auto {
+                background: #f1f5f9;
+                color: #475569;
+            }
+
+            .swp-lang-option {
+                width: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 7px 8px;
+                border: none;
+                background: transparent;
+                color: var(--guide-text, #1e293b);
+                border-radius: 5px;
+                font-size: 12px;
+                font-family: inherit;
+                cursor: pointer;
+                text-align: left;
+                transition: background 0.15s ease;
+                box-sizing: border-box;
+            }
+            .swp-lang-option:hover {
+                background: var(--guide-card-hover, #f1f5f9);
+            }
+            .swp-lang-option.is-active {
+                background: var(--guide-btn-active, #e0f2fe);
+                color: var(--guide-primary, #0284c7);
+                font-weight: 600;
+            }
+            .swp-lang-divider {
+                height: 1px;
+                background: var(--guide-border-light, #e2e8f0);
+                margin: 4px 0;
+            }
+            .swp-lang-check {
+                font-weight: 700;
+                color: var(--guide-primary, #0284c7);
+            }
         `;
         document.head.appendChild(style);
     }
@@ -773,7 +974,8 @@
         document.body.appendChild(bar);
         isMounted = true;
 
-        // Automatically register Extensions Guide system button at the bottom (section: bottom)
+        // Automatically register Language Switcher and Extensions Guide system buttons
+        registerLanguageSwitcherButton();
         registerSystemGuideButton();
 
         // Render all registered items
@@ -783,11 +985,171 @@
     /**
      * Registers the system button for the Extensions Guide at the bottom of the Activity Bar.
      */
+    /**
+     * Registers the runtime language switcher button docked at the bottom of the Activity Bar.
+     */
+    let isLangPopoverOpen = false;
+
+    function closeLanguagePopover() {
+        const existing = document.getElementById("swp-language-popover");
+        if (existing) existing.remove();
+        isLangPopoverOpen = false;
+        api.setItemActive("language-switcher", false);
+    }
+
+    function openLanguagePopover() {
+        closeLanguagePopover();
+        isLangPopoverOpen = true;
+        api.setItemActive("language-switcher", true);
+
+        const currentLocale = getActiveLocale();
+        const isOverridden = isLocaleOverridden();
+
+        const popover = document.createElement("div");
+        popover.id = "swp-language-popover";
+        popover.className = "swp-lang-popover";
+
+        const badgeHtml = isOverridden
+            ? `<span class="swp-lang-badge-tag swp-lang-badge-tag--manual">${t("langPopover.manualBadge", "Manual")}</span>`
+            : `<span class="swp-lang-badge-tag swp-lang-badge-tag--auto">${t("langPopover.autoBadge", "Config")}</span>`;
+
+        popover.innerHTML = `
+            <div class="swp-lang-popover-header">
+                <span>🌐 ${t("langPopover.title", "Language / Lingua")}</span>
+                ${badgeHtml}
+            </div>
+            <div class="swp-lang-popover-menu">
+                <button type="button" class="swp-lang-option ${isOverridden && currentLocale === "en" ? "is-active" : ""}" data-action="set-en">
+                    <span>🇬🇧 English</span>
+                    ${isOverridden && currentLocale === "en" ? `<span class="swp-lang-check">✓</span>` : ""}
+                </button>
+                <button type="button" class="swp-lang-option ${isOverridden && currentLocale === "it" ? "is-active" : ""}" data-action="set-it">
+                    <span>🇮🇹 Italiano</span>
+                    ${isOverridden && currentLocale === "it" ? `<span class="swp-lang-check">✓</span>` : ""}
+                </button>
+                <div class="swp-lang-divider"></div>
+                <button type="button" class="swp-lang-option swp-lang-reset ${!isOverridden ? "is-active" : ""}" data-action="reset">
+                    <div style="display:flex; flex-direction:column; text-align:left;">
+                        <span style="font-weight:600; display:flex; align-items:center; gap:5px;">
+                            ↺ ${t("langPopover.resetTitle", "Reset to Config (Auto)")}
+                        </span>
+                        <span style="font-size:10px; opacity:0.75; margin-top:2px;">
+                            ${t("langPopover.resetDesc", "Use plugin configs / host defaults")}
+                        </span>
+                    </div>
+                    ${!isOverridden ? `<span class="swp-lang-check">✓</span>` : ""}
+                </button>
+            </div>
+        `;
+
+        popover.querySelector('[data-action="set-en"]')?.addEventListener("click", () => {
+            setActiveLocale("en");
+            closeLanguagePopover();
+        });
+        popover.querySelector('[data-action="set-it"]')?.addEventListener("click", () => {
+            setActiveLocale("it");
+            closeLanguagePopover();
+        });
+        popover.querySelector('[data-action="reset"]')?.addEventListener("click", () => {
+            resetLocale();
+            closeLanguagePopover();
+        });
+
+        document.body.appendChild(popover);
+
+        setTimeout(() => {
+            const onDocClick = (e) => {
+                if (!popover.contains(e.target) && !e.target.closest('#swagger-activity-bar-item-language-switcher')) {
+                    closeLanguagePopover();
+                    document.removeEventListener("click", onDocClick);
+                }
+            };
+            document.addEventListener("click", onDocClick);
+
+            const onKey = (e) => {
+                if (e.key === "Escape") {
+                    closeLanguagePopover();
+                    window.removeEventListener("keydown", onKey);
+                }
+            };
+            window.addEventListener("keydown", onKey);
+        }, 10);
+    }
+
+    function toggleLanguagePopover() {
+        if (document.getElementById("swp-language-popover")) {
+            closeLanguagePopover();
+        } else {
+            openLanguagePopover();
+        }
+    }
+
+    /**
+     * Registers the runtime language switcher button docked at the bottom of the Activity Bar.
+     */
+    function registerLanguageSwitcherButton() {
+        const locale = getActiveLocale();
+        const isOverridden = isLocaleOverridden();
+        const labelText = isOverridden ? locale.toUpperCase() : "AUTO";
+        const titleText = isOverridden
+            ? t("langSwitcher.titleManual", `Language: ${locale.toUpperCase()} (Saved in LocalStorage). Click to change or reset.`, { locale: locale.toUpperCase() })
+            : t("langSwitcher.titleAuto", `Language: Auto / Config (${locale.toUpperCase()}). Click to change.`, { locale: locale.toUpperCase() });
+
+        api.registerItem({
+            id: "language-switcher",
+            title: titleText,
+            ariaLabel: t("langSwitcher.aria", "Language Switcher and Settings"),
+            iconHtml: `
+                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="2" y1="12" x2="22" y2="12"></line>
+                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                    </svg>
+                    <span style="font-size:8px;font-weight:700;letter-spacing:0.3px;margin-top:2px;">${labelText}</span>
+                </div>
+            `,
+            onClick: () => {
+                toggleLanguagePopover();
+            },
+            section: "bottom",
+            order: 85
+        });
+    }
+
+    function updateLanguageSwitcherButton() {
+        const locale = getActiveLocale();
+        const isOverridden = isLocaleOverridden();
+        const labelText = isOverridden ? locale.toUpperCase() : "AUTO";
+        const titleText = isOverridden
+            ? t("langSwitcher.titleManual", `Language: ${locale.toUpperCase()} (Saved in LocalStorage). Click to change or reset.`, { locale: locale.toUpperCase() })
+            : t("langSwitcher.titleAuto", `Language: Auto / Config (${locale.toUpperCase()}). Click to change.`, { locale: locale.toUpperCase() });
+
+        api.updateItem("language-switcher", {
+            title: titleText,
+            iconHtml: `
+                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="2" y1="12" x2="22" y2="12"></line>
+                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                    </svg>
+                    <span style="font-size:8px;font-weight:700;letter-spacing:0.3px;margin-top:2px;">${labelText}</span>
+                </div>
+            `
+        });
+    }
+
+    function updateSystemGuideButton() {
+        api.updateItem("extensions-guide", {
+            title: t("activityBar.title", "Swagger UI Plugins Suite — Extensions & Interactive Guide")
+        });
+    }
     function registerSystemGuideButton() {
         api.registerItem({
             id: "extensions-guide",
-            title: "Swagger UI Plugins Suite — Extensions & Interactive Guide",
-            ariaLabel: "Plugins and Interactive Guide",
+            title: t("activityBar.title", "Swagger UI Plugins Suite — Extensions & Interactive Guide"),
+            ariaLabel: t("activityBar.aria", "Plugins and Interactive Guide"),
             iconHtml: `
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M20.5 11H19V7a2 2 0 0 0-2-2h-4V3.5a2.5 2.5 0 0 0-5 0V5H4a2 2 0 0 0-2 2v3.8h1.5a2.5 2.5 0 0 1 0 5H2V20a2 2 0 0 0 2 2h4v-1.5a2.5 2.5 0 0 1 5 0V22h4a2 2 0 0 0 2-2v-4h1.5a2.5 2.5 0 0 0 0-5z"/>
@@ -962,11 +1324,11 @@
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M20.5 11H19V7a2 2 0 0 0-2-2h-4V3.5a2.5 2.5 0 0 0-5 0V5H4a2 2 0 0 0-2 2v3.8h1.5a2.5 2.5 0 0 1 0 5H2V20a2 2 0 0 0 2 2h4v-1.5a2.5 2.5 0 0 1 5 0V22h4a2 2 0 0 0 2-2v-4h1.5a2.5 2.5 0 0 0 0-5z"/>
                         </svg>
-                        <span>Swagger UI Plugins Suite — Extensions & Guide</span>
-                        <span class="swp-guide-count-chip">${guides.length} active</span>
+                        <span>${escapeHtml(t("guide.headerTitle", "Swagger UI Plugins Suite — Extensions & Guide"))}</span>
+                        <span class="swp-guide-count-chip">${escapeHtml(t("guide.activeChip", `${guides.length} active`, { count: guides.length }))}</span>
                     </div>
                     <div class="swp-guide-header-actions">
-                        <button type="button" class="swp-guide-btn-icon swp-guide-btn-close" title="Close modal (Esc)">✕</button>
+                        <button type="button" class="swp-guide-btn-icon swp-guide-btn-close" title="${escapeHtml(t("guide.closeModal", "Close modal (Esc)"))}">✕</button>
                     </div>
                 </div>
 
@@ -979,8 +1341,8 @@
                                 <line x1="12" y1="8" x2="12" y2="12"/>
                                 <line x1="12" y1="16" x2="12.01" y2="16"/>
                             </svg>
-                            <p><strong>No plugins have registered their guide yet.</strong></p>
-                            <span>Suite plugins register their documentation via <code>window.SwaggerActivityBar.registerPluginGuide()</code>.</span>
+                            <p><strong>${escapeHtml(t("guide.emptyTitle", "No plugins have registered their guide yet."))}</strong></p>
+                            <span>${escapeHtml(t("guide.emptyDesc", "Suite plugins register their documentation via window.SwaggerActivityBar.registerPluginGuide()."))}</span>
                         </div>
                     ` : guides.map((g) => `
                         <div class="swp-guide-card" data-guide-id="${escapeHtml(g.id)}">
@@ -1042,15 +1404,15 @@
             <div class="swp-guide-window" onclick="event.stopPropagation();">
                 <!-- Detail Header with Back button -->
                 <div class="swp-guide-header">
-                    <button type="button" class="swp-guide-btn-back" title="Return to plugins list">
-                        ← Back
+                    <button type="button" class="swp-guide-btn-back" title="${escapeHtml(t("guide.backTitle", "Return to plugins list"))}">
+                        ${escapeHtml(t("guide.back", "← Back"))}
                     </button>
                     <div class="swp-guide-header-title">
                         <span>${escapeHtml(guide.name)}</span>
                         <span class="swp-guide-version-badge">v${escapeHtml(guide.version)}</span>
                     </div>
                     <div class="swp-guide-header-actions">
-                        <button type="button" class="swp-guide-btn-icon swp-guide-btn-close" title="Close modal (Esc)">✕</button>
+                        <button type="button" class="swp-guide-btn-icon swp-guide-btn-close" title="${escapeHtml(t("guide.closeModal", "Close modal (Esc)"))}">✕</button>
                     </div>
                 </div>
 
@@ -1074,7 +1436,7 @@
                     <!-- Box Scorciatoie da tastiera (se presenti) -->
                     ${guide.shortcuts && guide.shortcuts.length > 0 ? `
                         <div class="swp-guide-shortcuts-box">
-                            <span class="swp-guide-shortcuts-title">Shortcuts & Quick Actions:</span>
+                            <span class="swp-guide-shortcuts-title">${escapeHtml(t("guide.shortcutsTitle", "Shortcuts & Quick Actions:"))}</span>
                             <div class="swp-guide-shortcuts-list">
                                 ${guide.shortcuts.map((sc) => {
                                     const parsed = parseShortcut(sc);
@@ -1287,7 +1649,10 @@
          * @returns {Array<Object>}
          */
         getRegisteredGuides() {
-            return Array.from(registeredGuides.values()).sort((a, b) => a.name.localeCompare(b.name));
+            const locale = getActiveLocale();
+            return Array.from(registeredGuides.values())
+                .map((g) => getLocalizedGuide(g, locale))
+                .sort((a, b) => a.name.localeCompare(b.name));
         },
 
         /**
@@ -1302,6 +1667,14 @@
     // Expose global APIs
     window.SwaggerActivityBar = api;
     window.registerPluginGuide = api.registerPluginGuide.bind(api);
+    window.SwaggerI18n = {
+        getLocale: getActiveLocale,
+        setLocale: setActiveLocale,
+        resetLocale: resetLocale,
+        isOverridden: isLocaleOverridden,
+        t: t,
+        getAvailableLocales: () => ["en", "it"]
+    };
 
     // Register Activity Bar documentation in the Extensions Guide
     api.registerPluginGuide({
@@ -1316,12 +1689,20 @@
         shortcuts: [
             "Esc: Close any active modal, popover, or docked drawer"
         ],
-        manual: `### What is the Activity Bar?
+        i18n: {
+            en: {
+                name: "Activity Bar & Extension Host",
+                description: "VS Code-style vertical dock hosting buttons, badges, flyout panels, and the interactive Extensions Guide.",
+                shortcuts: [
+                    "Esc: Close any active modal, popover, or docked drawer"
+                ],
+                manual: `### What is the Activity Bar?
 The **Activity Bar** is the central dock and host of the Swagger UI Plugins Suite.
 Inspired by modern IDEs (e.g. Visual Studio Code), it provides:
 - A compact vertical sidebar with automatic light and dark mode adaptation.
 - Slots for registering custom icon buttons, tooltips, and dynamic notification badges.
 - Coordinated drawer management for slide-out panels (e.g. *Network History*, *SignalR Tester*).
+- Interactive language toggle (\`🌐 EN | IT\`) saving preference to localStorage.
 - Coordinated z-index layers and a pinned bottom button for the **Extensions Guide** (puzzle icon 🧩).
 
 ### Registering a Dock Button
@@ -1338,28 +1719,40 @@ window.SwaggerActivityBar.registerItem({
     onClick: (e, btn) => { /* toggle tool panel */ }
 });
 \`\`\`
+`
+            },
+            it: {
+                name: "Activity Bar & Extension Host",
+                description: "Dock verticale stile VS Code per ospitare pulsanti, badge, pannelli a scomparsa e la Guida Estensioni interattiva.",
+                shortcuts: [
+                    "Esc: Chiude qualsiasi modale, popover o cassetto laterale attivo"
+                ],
+                manual: `### Cos'è l'Activity Bar?
+L'**Activity Bar** è il dock verticale centrale della suite di plugin per Swagger UI.
+Ispirata ai moderni ambienti di sviluppo (come Visual Studio Code), offre:
+- Una barra laterale compatta con adattamento automatico ai temi chiaro e scuro.
+- Slot per registrare pulsanti icona, tooltip e badge di notifica dinamici.
+- Gestione coordinata dei pannelli laterali (es. *Network History*, *SignalR Tester*).
+- Selettore di lingua interattivo (\`🌐 EN | IT\`) salvato in localStorage.
+- Tasto di sistema per la **Guida Estensioni** (icona puzzle 🧩).
 
-### Registering Plugin Documentation
-Plugins can document their features and shortcuts in the interactive guide:
+### Registrare un Pulsante nel Dock
+I plugin agganciano pulsanti all'Activity Bar tramite \`window.SwaggerActivityBar.registerItem\`:
 
 \`\`\`javascript
-window.SwaggerActivityBar.registerPluginGuide({
+window.SwaggerActivityBar.registerItem({
     id: "my-plugin",
-    name: "My Plugin",
-    version: "1.0.0",
-    description: "Brief overview",
-    manual: "Detailed Markdown documentation..."
+    title: "Mio Plugin",
+    iconHtml: "<svg>...</svg>",
+    badge: 0,
+    section: "top", // "top" o "bottom"
+    order: 10,
+    onClick: (e, btn) => { /* apri cassetto strumento */ }
 });
 \`\`\`
-
-### Synchronization Event
-If a plugin loads before the Activity Bar, it can register when the ready event fires:
-\`\`\`javascript
-window.addEventListener("swagger-activity-bar:ready", (e) => {
-    const activityBar = e.detail;
-    // Register buttons and guide
-});
-\`\`\``
+`
+            }
+        }
     });
 
     // Notify listeners that the API is ready

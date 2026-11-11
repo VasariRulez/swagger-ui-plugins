@@ -35,6 +35,75 @@
      * Security scheme identifier for IDP / MSAL registered in Swagger.
      * @type {string}
      */
+    // =========================================================================
+    // 1.1 INTERNATIONALIZATION (i18n) ENGINE & DICTIONARIES
+    // =========================================================================
+    const I18N = {
+        en: {
+            tokenApplied: 'Application token authorized for "{scheme}".',
+            tokenExpiredAlready: "The received application token is already expired.",
+            tokenAppliedWithDuration: 'Application token authorized for "{scheme}" (valid for ~{minutes} min).',
+            tokenExpiringSoon: "Application token will expire soon. Please re-login to renew.",
+            tokenExpired: "Application token has expired. Please re-authenticate.",
+            msalSuccess: "Microsoft sign-in completed{duration}. Exchanging token...",
+            msalDuration: " (valid for ~{minutes} min)",
+            missingAccessToken: "Exchange succeeded, but response is missing data.access_token.",
+            schemeNotAllowed: 'Swagger UI does not allow authorizing scheme "{scheme}".',
+            exchangeError: "Error exchanging application token.",
+            logoutNotice: "Microsoft session closed. Resetting session..."
+        },
+        it: {
+            tokenApplied: 'Token applicativo applicato a "{scheme}".',
+            tokenExpiredAlready: "Il token applicativo ricevuto risulta già scaduto.",
+            tokenAppliedWithDuration: 'Token applicativo applicato a "{scheme}" (valido per circa {minutes} min).',
+            tokenExpiringSoon: "Il token applicativo scadrà a breve. Riesegui il login per rinnovarlo.",
+            tokenExpired: "Il token applicativo è scaduto. Riesegui l'accesso per rinnovarlo.",
+            msalSuccess: "Accesso Microsoft completato{duration}. Scambio token in corso...",
+            msalDuration: " (valido per circa {minutes} min)",
+            missingAccessToken: "Scambio riuscito, ma la risposta non contiene data.access_token.",
+            schemeNotAllowed: 'Swagger UI non consente di autorizzare lo schema "{scheme}".',
+            exchangeError: "Errore durante lo scambio del token applicativo.",
+            logoutNotice: "Sessione Microsoft chiusa. Ripristino sessione in corso..."
+        }
+    };
+
+    /**
+     * Resolves the active language code.
+     * @returns {"en"|"it"}
+     */
+    function getActiveLocale() {
+        const stored = localStorage.getItem("swp_swagger_i18n_locale");
+        if (stored === "it" || stored === "en") return stored;
+        if (userConfig.locale === "it" || userConfig.locale === "en") return userConfig.locale;
+        if (window.SwaggerI18nConfig && (window.SwaggerI18nConfig.locale === "it" || window.SwaggerI18nConfig.locale === "en")) {
+            return window.SwaggerI18nConfig.locale;
+        }
+        if (window.SwaggerI18nConfig && window.SwaggerI18nConfig.autoDetect && typeof document !== "undefined") {
+            const docLang = (document.documentElement.lang || "").toLowerCase();
+            if (docLang.startsWith("it")) return "it";
+        }
+        return "en";
+    }
+
+    /**
+     * Translates a message key into current locale with parameter substitution and fallback.
+     */
+    function t(key, defaultText, params = {}) {
+        const locale = getActiveLocale();
+        const hostOverrides = (window.SwaggerI18nConfig && window.SwaggerI18nConfig.messages && window.SwaggerI18nConfig.messages[locale]) ||
+                              (userConfig.messages && userConfig.messages[locale]);
+        let str = (hostOverrides && hostOverrides[key]) ||
+                  (I18N[locale] && I18N[locale][key]) ||
+                  (I18N["en"] && I18N["en"][key]) ||
+                  defaultText;
+        if (params && typeof params === "object") {
+            for (const [k, v] of Object.entries(params)) {
+                str = str.replace(new RegExp(`\\{${k}\\}`, "g"), v);
+            }
+        }
+        return str;
+    }
+
     const MSAL_SCHEME_NAME = userConfig.msalSchemeName || "MsalAuth";
 
     /** 
@@ -279,7 +348,7 @@
 
         const payload = parseJwtPayload(token);
         if (!payload || typeof payload.exp !== "number") {
-            showToast(`Token applicativo applicato a "${APP_SCHEME_NAME}".`, "success");
+            showToast(t("tokenApplied", `Application token authorized for "${APP_SCHEME_NAME}".`, { scheme: APP_SCHEME_NAME }), "success");
             return;
         }
 
@@ -287,13 +356,13 @@
         const remainingMs = expiresAtMs - Date.now();
 
         if (remainingMs <= 0) {
-            showToast("Il token applicativo ricevuto risulta già scaduto.", "warning");
+            showToast(t("tokenExpiredAlready", "The received application token is already expired."), "warning");
             return;
         }
 
         const totalMinutes = getRemainingMinutes(expiresAtMs);
         showToast(
-            `Token applicativo applicato a "${APP_SCHEME_NAME}" (valido per circa ${totalMinutes} min).`,
+            t("tokenAppliedWithDuration", `Application token authorized for "${APP_SCHEME_NAME}" (valid for ~${totalMinutes} min).`, { scheme: APP_SCHEME_NAME, minutes: totalMinutes }),
             "success"
         );
 
@@ -304,7 +373,7 @@
         if (timeUntilWarningMs > 0) {
             warningTimerId = window.setTimeout(() => {
                 showToast(
-                    "Il token applicativo scadrà a breve. Riesegui il login per rinnovarlo.",
+                    t("tokenExpiringSoon", "Application token will expire soon. Please re-login to renew."),
                     "warning"
                 );
             }, timeUntilWarningMs);
@@ -319,7 +388,7 @@
                 } catch {}
             }
             showToast(
-                "Il token applicativo è scaduto. Riesegui l'accesso per rinnovarlo.",
+                t("tokenExpired", "Application token has expired. Please re-authenticate."),
                 "error"
             );
         }, remainingMs);
@@ -730,11 +799,12 @@
         // Calcolo durata residua token MSAL per il messaggio informativo
         const msalPayload = parseJwtPayload(msalToken);
         const msalExpiresAtMs = msalPayload?.exp ? msalPayload.exp * 1000 : null;
-        const msalDurationText = msalExpiresAtMs && msalExpiresAtMs > Date.now()
-            ? ` (valido per circa ${getRemainingMinutes(msalExpiresAtMs)} min)`
+        const msalRemainingMin = msalExpiresAtMs && msalExpiresAtMs > Date.now() ? getRemainingMinutes(msalExpiresAtMs) : null;
+        const msalDurationText = msalRemainingMin
+            ? t("msalDuration", ` (valid for ~${msalRemainingMin} min)`, { minutes: msalRemainingMin })
             : "";
 
-        showToast(`Accesso Microsoft completato${msalDurationText}. Scambio token in corso...`, "info");
+        showToast(t("msalSuccess", `Microsoft sign-in completed${msalDurationText}. Exchanging token...`, { duration: msalDurationText }), "info");
 
         try {
             const response = await originalFetch(EXCHANGE_ENDPOINT_URL, {
@@ -757,13 +827,13 @@
 
             const internalToken = getInternalTokenFromExchangeResponse(data);
             if (!internalToken) {
-                showToast("Scambio riuscito, ma la risposta non contiene data.access_token.", "error");
+                showToast(t("missingAccessToken", "Exchange succeeded, but response is missing data.access_token."), "error");
                 return;
             }
 
             const ui = getSwaggerUi();
             if (!ui?.authActions || typeof ui.authActions.authorize !== "function") {
-                showToast(`Swagger UI does not allow authorizing scheme "${APP_SCHEME_NAME}".`, "error");
+                showToast(t("schemeNotAllowed", `Swagger UI does not allow authorizing scheme "${APP_SCHEME_NAME}".`, { scheme: APP_SCHEME_NAME }), "error");
                 return;
             }
 
@@ -796,7 +866,7 @@
 
             console.error("[Swagger Auth] Error during token exchange:", error);
             if (generation === authGeneration && !logoutInProgress) {
-                showToast("Error exchanging application token.", "error");
+                showToast(t("exchangeError", "Error exchanging application token."), "error");
             }
         } finally {
             if (generation === authGeneration) {
@@ -834,7 +904,7 @@
             } catch {}
         }
 
-        showToast("Sessione Microsoft chiusa. Ripristino sessione in corso...", "info");
+        showToast(t("logoutNotice", "Microsoft session closed. Resetting session..."), "info");
 
         // Ricarica la pagina dopo un breve delay per azzerare lo stato PKCE corrotto in memoria
         window.setTimeout(() => {
@@ -897,6 +967,9 @@
                 detectEndpointsFromSwaggerSpec();
                 registerGuideDocumentation();
                 window.addEventListener("swagger-activity-bar:ready", registerGuideDocumentation);
+    window.addEventListener("swagger-i18n:locale-changed", () => {
+        registerGuideDocumentation(true);
+    });
                 console.info("[Swagger Auth] Observer autenticazione Swagger UI inizializzato.");
                 return;
             }
@@ -914,36 +987,64 @@
     /**
      * Publishes plugin metadata and documentation to interactive Activity Bar guide.
      */
-    function registerGuideDocumentation() {
-        if (isGuideRegistered) return;
+    function registerGuideDocumentation(force = false) {
+        if (isGuideRegistered && !force) return;
         if (window.SwaggerActivityBar && typeof window.SwaggerActivityBar.registerPluginGuide === "function") {
             isGuideRegistered = true;
             window.SwaggerActivityBar.registerPluginGuide({
                 id: "token-interceptor",
-                name: "Dual Token Interceptor (MSAL & Bearer)",
+                name: "Automated Token Exchange & Interceptor",
                 version: "1.0.0",
-                description: "Automates two-tier authentication: Microsoft Entra ID login -> internal token exchange -> application Bearer scheme.",
+                description: "Seamless bridge between identity providers (e.g. MSAL / Microsoft Entra ID) and backend API Bearer tokens with automated exchange and lifecycle alerts.",
                 shortcuts: [
-                    "Authorize: Complete Microsoft Entra ID login in standard popup",
-                    "Auto-Exchange: Transparent exchange with token endpoint",
-                    "Logout: Revoke and clean both sessions synchronously"
+                    "Automated Exchange: Transparently requests application Bearer JWT upon MSAL sign-in",
+                    "Lifetime Alerts: Shows toast countdown and pre-warning before token expires",
+                    "Synchronized Logout: Revokes credentials and resets Swagger PKCE state"
                 ],
                 iconHtml: `
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
                     </svg>
                 `,
-                manual: `
+                i18n: {
+                    en: {
+                        name: "Automated Token Exchange & Interceptor",
+                        description: "Seamless bridge between identity providers (e.g. MSAL / Microsoft Entra ID) and backend API Bearer tokens with automated exchange and lifecycle alerts.",
+                        shortcuts: [
+                            "Automated Exchange: Transparently requests application Bearer JWT upon MSAL sign-in",
+                            "Lifetime Alerts: Shows toast countdown and pre-warning before token expires",
+                            "Synchronized Logout: Revokes credentials and resets Swagger PKCE state"
+                        ],
+                        manual: `
 ### Overview
-Streamlines two-tier API authentication requiring both identity provider credentials (Microsoft Entra ID) and an internal backend application token.
+Solves dual-tier enterprise authentication architecture: user logs in via corporate IDP (MSAL), and Swagger automatically exchanges the ID token for an internal application JWT Bearer token without requiring manual developer copy-paste.
 
-### Automated Flow
-1. Upon logging in via Swagger's standard **Authorize** dialog, the plugin captures the IDP token.
-2. In the background, exchanges the token with the configured backend exchange endpoint.
-3. Automatically authorizes the application Bearer scheme with the resulting token.
-4. Synchronizes logout across both schemes and resets PKCE authentication state.
+### Key Capabilities
+- **Zero-Click Exchange**: catches Redux store authorization and immediately calls the exchange endpoint.
+- **Expiration Alerts**: floating toast notification alerts developers 2 minutes before the token expires.
+- **Synchronized Logout**: logging out of MSAL cleanly revokes the Bearer scheme and resets Swagger UI state.
 `
+                    },
+                    it: {
+                        name: "Intercettatore & Scambio Token Automatico",
+                        description: "Ponte automatizzato tra provider di identità aziendali (MSAL / Entra ID) e token Bearer applicativi con notifiche sul ciclo di vita.",
+                        shortcuts: [
+                            "Scambio Automatico: Richiede il token applicativo subito dopo il login MSAL",
+                            "Avvisi Scadenza: Notifiche toast con durata residua e preavviso",
+                            "Logout Sincronizzato: Revoca le credenziali e azzera lo stato PKCE di Swagger"
+                        ],
+                        manual: `
+### Panoramica
+Risolve l'architettura a doppio livello tipica delle applicazioni aziendali: l'utente si autentica tramite IDP (MSAL / Entra ID) e Swagger UI scambia istantaneamente il token ID con il JWT applicativo interno, eliminando copia-incolla manuali.
+
+### Funzionalità Principali
+- **Scambio Trasparente**: intercetta l'evento di login nello store Redux e chiama l'endpoint di backend dedicato (\`/api/auth/token\`).
+- **Avvisi di Scadenza**: notifiche toast fluttuanti avvisano con 2 minuti di anticipo prima che il token scada.
+- **Logout Sincronizzato**: alla disconnessione da MSAL, revoca automaticamente anche lo schema Bearer e ricarica pulitamente lo stato interno.
+`
+                    }
+                }
             });
         }
     }

@@ -88,3 +88,31 @@ You can customize the grid pagination and export behavior by declaring `window.S
 | Shortcut | Description |
 | :--- | :--- |
 | `Escape` | Close the nested object / array details popover |
+
+---
+
+## Internationalization (i18n)
+
+This plugin fully supports runtime internationalization (i18n) with base dictionaries for:
+- 🇬🇧 **English (`en`)** - Default
+- 🇮🇹 **Italian (`it`)**
+
+### Runtime Language Switcher
+When used alongside `swagger-activity-bar.js`, users can toggle the active language live via the Activity Bar switcher (`🌐 EN | IT`) at the bottom left. The active language is automatically persisted to `localStorage` under the key `"swp_swagger_i18n_locale"` and survives page reloads.
+
+### Host Configuration & Custom Overrides
+You can define initial locale or override specific message keys via `window.SwaggerI18nConfig`:
+
+```html
+<script>
+  window.SwaggerI18nConfig = {
+    locale: "it", // "en" | "it" (default: "en")
+    autoDetect: true, // Auto-detect from <html lang="..."> if no saved preference
+    messages: {
+      it: {
+        // Optional key overrides
+      }
+    }
+  };
+</script>
+```

@@ -74,3 +74,31 @@ The viewer styles and thresholds provide:
   - **Copy**: Copies formatted, indented JSON to the clipboard.
   - **Download**: Triggers a browser download of the response as a `.json` file.
   - **Raw / Pretty View**: Toggles between this interactive tree view and Swagger UI's raw text response block.
+
+---
+
+## Internationalization (i18n)
+
+This plugin fully supports runtime internationalization (i18n) with base dictionaries for:
+- 🇬🇧 **English (`en`)** - Default
+- 🇮🇹 **Italian (`it`)**
+
+### Runtime Language Switcher
+When used alongside `swagger-activity-bar.js`, users can toggle the active language live via the Activity Bar switcher (`🌐 EN | IT`) at the bottom left. The active language is automatically persisted to `localStorage` under the key `"swp_swagger_i18n_locale"` and survives page reloads.
+
+### Host Configuration & Custom Overrides
+You can define initial locale or override specific message keys via `window.SwaggerI18nConfig`:
+
+```html
+<script>
+  window.SwaggerI18nConfig = {
+    locale: "it", // "en" | "it" (default: "en")
+    autoDetect: true, // Auto-detect from <html lang="..."> if no saved preference
+    messages: {
+      it: {
+        // Optional key overrides
+      }
+    }
+  };
+</script>
+```
