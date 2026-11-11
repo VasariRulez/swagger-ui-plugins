@@ -56,6 +56,9 @@
         /** Maximum number of results returned by search */
         MAX_RESULTS: typeof userConfig.maxResults === "number" ? userConfig.maxResults : 30,
 
+        /** Activity Bar sort order priority (lower values on top; defaults to 20) */
+        ACTIVITY_BAR_ORDER: typeof userConfig.activityBarOrder === "number" ? userConfig.activityBarOrder : 20,
+
         /** Duration of highlight glow animation upon reaching target endpoint (ms) */
         HIGHLIGHT_DURATION_MS: typeof userConfig.highlightDurationMs === "number" ? userConfig.highlightDurationMs : 2500,
 
@@ -1335,7 +1338,7 @@
             `,
             onClick: openSpotlightModal,
             section: "top",
-            order: 20
+            order: CONFIG.ACTIVITY_BAR_ORDER
         });
     }
 

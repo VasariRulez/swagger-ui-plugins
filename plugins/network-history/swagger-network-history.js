@@ -36,6 +36,9 @@
         /** LocalStorage key for persisting request history */
         STORAGE_KEY: userConfig.storageKey || "swp_swagger_network_history",
 
+        /** Activity Bar sort order priority (lower values on top; defaults to 10) */
+        ACTIVITY_BAR_ORDER: typeof userConfig.activityBarOrder === "number" ? userConfig.activityBarOrder : 10,
+
         /** Maximum number of requests retained in the circular buffer */
         MAX_HISTORY_ENTRIES: typeof userConfig.maxEntries === "number" ? userConfig.maxEntries : 50,
 
@@ -1164,7 +1167,7 @@
                 `,
                 onClick: () => toggleDrawer(),
                 section: "top",
-                order: 25,
+                order: CONFIG.ACTIVITY_BAR_ORDER,
                 isActive: false
             });
 

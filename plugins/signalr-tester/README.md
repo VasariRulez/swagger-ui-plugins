@@ -77,6 +77,7 @@ You can customize the studio presets and transport by defining `window.SwaggerSi
 | `defaultListeners` | `string[]` | Initial event names preloaded into listener tags |
 | `transport` | `string` | Force specific SignalR transport (`"WebSockets"`, `"LongPolling"`, `"ServerSentEvents"`) |
 | `autoReconnect` | `boolean` | Enable automatic reconnection logic (`withAutomaticReconnect()`) |
+| `activityBarOrder` | `number` | Sort order in Activity Bar dock (lower values appear first, default: 30) |
 
 > [!TIP]
 > You do not need to modify the code to connect to your hub: you can directly type any relative (`/hubs/my-hub`) or absolute (`https://api.domain.com/hubs/my-hub`) hub URL directly in the studio's input field.

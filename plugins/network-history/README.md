@@ -67,6 +67,7 @@ You can customize the plugin by declaring `window.SwaggerNetworkHistoryConfig` b
 | `openOnError` | `false` | Automatically opens history drawer when a request fails or returns HTTP >= 400 |
 | `fastThreshold` | `500` ms | Latencies below this threshold display green pills |
 | `mediumThreshold`| `1500` ms | Latencies between fast and medium display orange pills; above display red pills |
+| `activityBarOrder` | `10` | Sort order in Activity Bar dock (lower values appear first, default: 10) |
 | `excludePatterns` | `[]` | Additional regex patterns to exclude from recording |
 
 ---

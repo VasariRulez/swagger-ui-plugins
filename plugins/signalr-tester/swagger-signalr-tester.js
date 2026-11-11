@@ -56,6 +56,9 @@
         /** Automatic reconnection toggle (default: true) */
         AUTO_RECONNECT: userConfig.autoReconnect !== false,
 
+        /** Activity Bar sort order priority (lower values on top; defaults to 30) */
+        ACTIVITY_BAR_ORDER: typeof userConfig.activityBarOrder === "number" ? userConfig.activityBarOrder : 30,
+
         /** LocalStorage persistence keys */
         STORAGE_KEYS: {
             LAST_HUB: "swp_signalr_last_hub",
@@ -1250,7 +1253,7 @@
                 `,
                 onClick: toggleDrawer,
                 section: "top",
-                order: 10,
+                order: CONFIG.ACTIVITY_BAR_ORDER,
                 isActive: isDrawerOpen
             });
             return;

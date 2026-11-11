@@ -60,6 +60,7 @@ You can customize shortcuts, thresholds, and behavior by defining `window.Swagge
 | `highlightDurationMs` | `number` | `2500` | Duration of the glow ring animation after scrolling |
 | `backToTopEnabled` | `boolean` | `true` | Enables bottom-right floating Back to Top button |
 | `backToTopThresholdPx` | `number` | `280` | Scroll offset threshold to show Back to Top button |
+| `activityBarOrder` | `number` | `20` | Sort order in Activity Bar dock (lower values appear first, default: 20) |
 
 ---
 
