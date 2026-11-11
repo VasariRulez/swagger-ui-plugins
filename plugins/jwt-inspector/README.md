@@ -11,9 +11,10 @@ A real-time JWT token decoder, claims explorer, and expiration countdown monitor
 - **Header & Payload Claims Viewer**:
   - Formatted claims table with search filter (`sub`, `iss`, `aud`, `exp`, `roles`, `email`, etc.).
   - Color-coded JSON view of raw claims.
-- **Live Expiration Clock**:
+- **Live Expiration Clock & Dual Access Points**:
   - Real-time countdown timer (`Expires in: 14m 32s`).
-  - Visual status pill: Active (Green), Expiring Soon (< 2 mins, Amber), Expired (Red).
+  - Visual status pill in Swagger UI's top navigation bar (topbar): Active (Green), Expiring Soon (< 2 mins, Amber), Expired (Red).
+  - Dedicated key icon (🔑) in the vertical **Activity Bar** dock for instant modal inspection from anywhere on the page, even when scrolled or if the topbar is hidden.
 - **1-Click Copy & Debugger Link**:
   - Copy raw token or payload with a single click.
   - One-click link to open the token on `jwt.ms` or `jwt.io`.
@@ -76,7 +77,7 @@ You can customize the JWT Inspector by providing `window.SwaggerJwtConfig`:
 | `Escape` | Close the JWT Inspector modal dialog |
 
 > [!NOTE]
-> The claims inspector modal is opened by clicking **"Inspect Claims"** in the JWT status bar (located directly below Swagger UI's Authorize section).
+> The claims inspector modal can be toggled at any time by clicking the key icon (🔑) in the **Activity Bar**, or by clicking **"Inspect Claims"** in the JWT status pill located in Swagger UI's top navigation bar (topbar).
 
 ---
 

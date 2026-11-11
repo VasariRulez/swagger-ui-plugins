@@ -72,6 +72,8 @@
     // =========================================================================
     const I18N = {
         en: {
+            activityBarTitle: "JWT Claims & Token Inspector",
+            activityBarAria: "JWT Claims & Token Inspector",
             statusBarTitle: "Click to open JWT Claims Inspector",
             unauthenticated: "🔒 JWT: Not authenticated",
             inspectPill: "🔍 Inspect",
@@ -101,6 +103,8 @@
             expiresIn: "Expires in {time}"
         },
         it: {
+            activityBarTitle: "Ispettore Token e Claims JWT",
+            activityBarAria: "Ispettore Token e Claims JWT",
             statusBarTitle: "Clicca per aprire il JWT Claims Inspector dettagliato",
             unauthenticated: "🔒 JWT: Non autenticato",
             inspectPill: "🔍 Ispeziona",
@@ -819,7 +823,7 @@
             statusBar = document.createElement("div");
             statusBar.id = CONFIG.STATUS_BAR_ELEMENT_ID;
             statusBar.title = t("statusBarTitle", "Click to open JWT Claims Inspector");
-            statusBar.addEventListener("click", openInspectorModal);
+            statusBar.addEventListener("click", toggleInspectorModal);
 
             topbarWrapper.appendChild(statusBar);
         }
@@ -911,6 +915,10 @@
         updateModalContent(card);
         overlay.appendChild(card);
         document.body.appendChild(overlay);
+
+        if (window.SwaggerActivityBar && typeof window.SwaggerActivityBar.setItemActive === "function") {
+            window.SwaggerActivityBar.setItemActive("jwt-inspector", true);
+        }
     }
 
     /**
@@ -1039,6 +1047,20 @@
     function closeInspectorModal() {
         const modal = document.getElementById(CONFIG.MODAL_ELEMENT_ID);
         if (modal) modal.remove();
+        if (window.SwaggerActivityBar && typeof window.SwaggerActivityBar.setItemActive === "function") {
+            window.SwaggerActivityBar.setItemActive("jwt-inspector", false);
+        }
+    }
+
+    /**
+     * Toggles the inspector modal open or closed.
+     */
+    function toggleInspectorModal() {
+        if (document.getElementById(CONFIG.MODAL_ELEMENT_ID)) {
+            closeInspectorModal();
+        } else {
+            openInspectorModal();
+        }
     }
 
     // =========================================================================
@@ -1121,6 +1143,7 @@
 
         if (changed) {
             renderStatusBar();
+            updateActivityBarButton();
 
             // If modal is currently open, refresh its content
             const openModalCard = document.querySelector(`#${CONFIG.MODAL_ELEMENT_ID} .jwt-modal-card`);
@@ -1167,13 +1190,20 @@
                     if (countdownIntervalId === null) {
                         countdownIntervalId = window.setInterval(() => {
                             renderStatusBar();
+                            updateActivityBarButton();
                         }, CONFIG.COUNTDOWN_TICK_INTERVAL_MS);
                     }
 
+                    registerInActivityBar();
                     registerGuideDocumentation();
-                    window.addEventListener("swagger-activity-bar:ready", registerGuideDocumentation);
+                    window.addEventListener("swagger-activity-bar:ready", () => {
+                        registerInActivityBar();
+                        registerGuideDocumentation(true);
+                        updateActivityBarButton();
+                    });
                     window.addEventListener("swagger-i18n:locale-changed", () => {
                         registerGuideDocumentation(true);
+                        updateActivityBarButton();
                         renderStatusBar();
                         const modal = document.getElementById(CONFIG.MODAL_ELEMENT_ID);
                         if (modal) {
@@ -1189,10 +1219,52 @@
 
             if (Date.now() - startTime >= CONFIG.UI_DISCOVERY_TIMEOUT_MS) {
                 window.clearInterval(checkInterval);
+                registerInActivityBar();
                 registerGuideDocumentation();
                 console.warn("[Swagger JWT Inspector] Discovery timeout waiting for Swagger UI.");
             }
         }, CONFIG.UI_DISCOVERY_INTERVAL_MS);
+    }
+
+    /**
+     * Registers JWT Inspector button in modular Activity Bar (if present).
+     */
+    function registerInActivityBar() {
+        if (!window.SwaggerActivityBar || typeof window.SwaggerActivityBar.registerItem !== "function") return;
+        if (window.SwaggerActivityBar.getItemElement("jwt-inspector")) return;
+
+        window.SwaggerActivityBar.registerItem({
+            id: "jwt-inspector",
+            title: t("activityBarTitle", "JWT Claims & Token Inspector"),
+            ariaLabel: t("activityBarAria", "JWT Claims & Token Inspector"),
+            iconHtml: `
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;">
+                    <circle cx="7.5" cy="15.5" r="5.5"></circle>
+                    <path d="m11.5 11.5 8.5-8.5"></path>
+                    <path d="m16 7 2.5 2.5"></path>
+                    <path d="m19 4 2 2"></path>
+                </svg>
+            `,
+            onClick: () => toggleInspectorModal(),
+            section: "top",
+            order: 25
+        });
+        updateActivityBarButton();
+    }
+
+    /**
+     * Updates Activity Bar item title/tooltip with active user and remaining time.
+     */
+    function updateActivityBarButton() {
+        if (!window.SwaggerActivityBar || typeof window.SwaggerActivityBar.updateItem !== "function") return;
+        const currentPayload = activePayloads.bearer || activePayloads.msal;
+        let title = t("activityBarTitle", "JWT Claims & Token Inspector");
+        if (currentPayload) {
+            const userName = extractUserName(currentPayload);
+            const expCountdown = calculateTimeRemaining(currentPayload.exp);
+            title += ` (${userName} · ⏳ ${expCountdown.text})`;
+        }
+        window.SwaggerActivityBar.updateItem("jwt-inspector", { title });
     }
 
     let isGuideRegistered = false;
@@ -1210,14 +1282,17 @@
                 version: "1.0.0",
                 description: "Decodes active JWT tokens (Bearer and MSAL) in real time with expiration countdown, roles, and claims inspection.",
                 shortcuts: [
-                    "Status Bar: Displays user, roles, and remaining token lifetime",
+                    "Activity Bar: Click the key icon to toggle the Claims Inspector modal",
+                    "Status Bar: Displays user, roles, and remaining token lifetime in topbar",
                     "Inspect Claims: Opens detailed modal with claims breakdown",
                     "Copy Token: Copies raw Bearer token string to clipboard"
                 ],
                 iconHtml: `
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                        <circle cx="7.5" cy="15.5" r="5.5"></circle>
+                        <path d="m11.5 11.5 8.5-8.5"></path>
+                        <path d="m16 7 2.5 2.5"></path>
+                        <path d="m19 4 2 2"></path>
                     </svg>
                 `,
                 i18n: {
@@ -1225,7 +1300,8 @@
                         name: "JWT Claims & Token Inspector",
                         description: "Decodes active JWT tokens (Bearer and MSAL) in real time with expiration countdown, roles, and claims inspection.",
                         shortcuts: [
-                            "Status Bar: Displays user, roles, and remaining token lifetime",
+                            "Activity Bar: Click the key icon to toggle the Claims Inspector modal",
+                            "Status Bar: Displays user, roles, and remaining token lifetime in topbar",
                             "Inspect Claims: Opens detailed modal with claims breakdown",
                             "Copy Token: Copies raw Bearer token string to clipboard"
                         ],
@@ -1249,7 +1325,8 @@ Clicking **"Inspect Claims"** opens the inspector modal:
                         name: "JWT Claims & Token Inspector",
                         description: "Decodifica i token JWT attivi (Bearer e MSAL) in tempo reale con countdown di scadenza, ruoli e ispezione claims.",
                         shortcuts: [
-                            "Status Bar: Mostra utente, ruoli e durata residua del token",
+                            "Activity Bar: Clicca l'icona della chiave per aprire/chiudere l'ispettore dei Claims",
+                            "Status Bar: Mostra utente, ruoli e durata residua del token nell'header",
                             "Ispeziona Claims: Apre la modale dettagliata con la suddivisione dei parametri",
                             "Copia Token: Copia il token Bearer raw negli appunti"
                         ],
