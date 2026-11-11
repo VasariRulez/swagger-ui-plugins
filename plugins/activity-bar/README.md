@@ -11,7 +11,7 @@ The **Activity Bar** attaches a vertical toolbar to the left edge of Swagger UI,
 - **VS Code-style Activity Dock**: Docked vertically on the left edge with customizable icon buttons, active indicators, and notification badges.
 - **Unified Sidebar / Drawer Manager**: Manages opening, closing, and toggling of flyout drawers from any registered plugin (e.g. Network History, SignalR Tester, JWT Inspector).
 - **Interactive Extensions Guide (Help Center)**: Built-in modal dialog documenting every active plugin, keyboard shortcut, configuration snippet, and interactive walkthrough.
-- **Dynamic Plugin Self-Registration API (`window.registerPluginGuide`)**: Other plugins automatically register their metadata, badges, and documentation cards when loaded.
+- **Dynamic Plugin Self-Registration API (`window.SwaggerActivityBar.registerPluginGuide`)**: Other plugins automatically register their metadata, badges, and documentation cards when loaded.
 - **Zero Dependencies**: Pure vanilla JavaScript & CSS with isolated namespacing (`swp-activity-bar-*`, `swp-guide-*`).
 
 ---
@@ -48,53 +48,64 @@ app.UseSwaggerUI(c =>
 
 ## How It Works
 
-1. Once the DOM and Swagger UI mount, the plugin creates the container `#swp-activity-bar` fixed to the left.
-2. The bottom of the bar features a **Guide (Help)** button (puzzle icon) that opens the comprehensive documentation dialog.
-3. Plugins can hook into the Activity Bar via global helper APIs exposed on `window`.
+1. Once the DOM and Swagger UI mount, the plugin creates the container `#swagger-activity-bar` fixed to the left edge.
+2. The bottom of the bar features a **Guide (Help)** button (puzzle icon 🧩) that opens the comprehensive documentation dialog.
+3. Plugins hook into the Activity Bar via the global `window.SwaggerActivityBar` API or by listening for the `swagger-activity-bar:ready` event.
 
 ---
 
 ## JavaScript API
 
+The plugin exposes `window.SwaggerActivityBar` with the following methods:
+
 ### Registering a Plugin in the Extensions Guide
 
-Any custom plugin can add a card to the Extensions Guide dialog:
+Any plugin can add its documentation card to the Extensions Guide dialog:
 
 ```javascript
-if (typeof window.registerPluginGuide === "function") {
-    window.registerPluginGuide({
-        id: "my-custom-plugin",
-        title: "My Custom Plugin",
-        badge: "v1.0",
-        order: 10, // sorting order in the guide modal
-        summary: "Detailed overview of what this plugin provides.",
-        features: [
-            "Feature 1: Automatic parameter generation",
-            "Feature 2: Real-time telemetry"
-        ],
-        howToUse: [
-            "Open any endpoint in Swagger UI.",
-            "Click the action button to inspect payload."
-        ],
-        shortcuts: [
-            { key: "Ctrl + Shift + X", desc: "Toggle custom tool window" }
-        ],
-        configSample: `window.MyPluginConfig = { enabled: true };`
-    });
+function registerGuide() {
+    if (window.SwaggerActivityBar && typeof window.SwaggerActivityBar.registerPluginGuide === "function") {
+        window.SwaggerActivityBar.registerPluginGuide({
+            id: "my-custom-plugin",
+            name: "My Custom Plugin",
+            version: "1.0.0",
+            description: "Detailed overview of what this plugin provides.",
+            manual: `### Overview
+Detailed plugin manual formatted in Markdown.
+
+- Feature 1: Automatic parameter generation
+- Feature 2: Real-time telemetry
+`,
+            shortcuts: [
+                "Esc: Close panel or active modal"
+            ],
+            iconHtml: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>`
+        });
+    }
+}
+
+// Register directly or wait for the ready event if loaded beforehand
+if (window.SwaggerActivityBar) {
+    registerGuide();
+} else {
+    window.addEventListener("swagger-activity-bar:ready", registerGuide);
 }
 ```
 
-### Adding a Button to the Activity Bar
+### Adding a Tool Button to the Activity Bar
 
 ```javascript
-const bar = document.getElementById("swp-activity-bar-items");
-if (bar) {
-    const btn = document.createElement("button");
-    btn.className = "swp-activity-bar-btn";
-    btn.title = "Open Tool (Alt + T)";
-    btn.innerHTML = `<svg ...>...</svg>`;
-    btn.addEventListener("click", () => toggleMyPanel());
-    bar.appendChild(btn);
+if (window.SwaggerActivityBar && typeof window.SwaggerActivityBar.registerItem === "function") {
+    window.SwaggerActivityBar.registerItem({
+        id: "my-tool",
+        title: "My Custom Tool",
+        iconHtml: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">...</svg>`,
+        section: "top", // "top" or "bottom"
+        order: 10,
+        onClick: (event, buttonEl) => {
+            toggleMyToolPanel();
+        }
+    });
 }
 ```
 
@@ -104,8 +115,10 @@ if (bar) {
 
 | Shortcut | Description |
 | :--- | :--- |
-| `Alt + /` or `?` | Toggle the Extensions Guide modal |
-| `Escape` | Close the Extensions Guide modal |
+| `Escape` | Close the Extensions Guide modal (or return from detail view to main guide list) |
+
+> [!NOTE]
+> The Extensions Guide is opened by clicking the puzzle icon (🧩) at the bottom of the Activity Bar.
 
 ---
 

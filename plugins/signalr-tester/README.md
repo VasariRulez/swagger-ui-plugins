@@ -14,7 +14,7 @@ A complete, interactive WebSocket & SignalR Hub debugging studio embedded direct
   - Color-coded log levels (`Info`, `Success`, `Warning`, `Error`, `Inbound`, `Outbound`).
   - Expandable JSON payload viewer for inbound/outbound packets.
   - Filter by log level, event name, or search query.
-- **Automatic JWT Bearer Token Injection**: Automatically queries `localStorage` (`swp_bearer_token` or active token from the Token Interceptor plugin) and injects it into the SignalR `accessTokenFactory` headers.
+- **Automatic JWT Bearer Token Injection**: Automatically extracts the active Bearer token from Swagger UI's internal authorization state and injects it into SignalR's `accessTokenFactory`.
 
 ---
 
@@ -51,48 +51,38 @@ app.UseSwaggerUI(c =>
 
 ---
 
-## Configuration
+## Configuration Reference
 
-Define predefined hubs, common methods, and default listeners via `window.SwaggerSignalRConfig`:
+The studio is pre-configured via the internal `CONFIG` block in `swagger-signalr-tester.js`:
 
-```javascript
-window.SwaggerSignalRConfig = {
-    // Hub presets available in the hub URL dropdown
-    hubs: [
-        { name: "Notifications Hub", url: "/hubs/notifications" },
-        { name: "Chat Hub", url: "/hubs/chat" },
-        { name: "Live Telemetry", url: "/hubs/telemetry" }
-    ],
+| Setting | Default | Description |
+| :--- | :--- | :--- |
+| `DEFAULT_HUB_PRESETS` | Pre-populated common hub routes | Suggested hub routes displayed in the dropdown menu |
+| `DEFAULT_EVENT_LISTENERS` | Common notification events | Suggested broadcast events populated in the listener dropdown |
+| `STORAGE_KEYS` | Prefixed `swp_signalr_*` | Keys used in `localStorage` to persist active hub URL, listeners, and arguments across reloads |
 
-    // Default listeners pre-registered upon connection
-    defaultListeners: [
-        "ReceiveMessage",
-        "ReceiveNotification",
-        "Heartbeat"
-    ],
-
-    // Default connection options
-    transport: "WebSockets", // "WebSockets" | "LongPolling" | "ServerSentEvents"
-    autoReconnect: true
-};
-```
+> [!TIP]
+> You do not need to modify the code to connect to your hub: you can directly type any relative (`/hubs/my-hub`) or absolute (`https://api.domain.com/hubs/my-hub`) hub URL directly in the studio's input field.
 
 ---
 
 ## Keyboard Shortcuts
 
-| Shortcut | Description |
-| :--- | :--- |
-| `Alt + S` | Toggle SignalR Studio drawer |
-| `Escape` | Close the SignalR drawer |
+| Shortcut | Context | Description |
+| :--- | :--- | :--- |
+| `Escape` | Global | Close the SignalR Studio drawer |
+| `Enter` | Listener input field | Register the typed event listener |
+
+> [!NOTE]
+> The studio drawer is opened by clicking the radio waves icon in the **Activity Bar** (or the floating action button if Activity Bar is not installed).
 
 ---
 
 ## Usage Workflow
 
-1. Open the studio via the Activity Bar icon (radio waves) or press `Alt + S`.
+1. Open the studio via the Activity Bar icon (radio waves).
 2. Choose a preset hub from the dropdown or type `/hubs/yourhub`.
-3. If your hub requires authentication, the studio will automatically bind your active Bearer token.
+3. If your hub requires authentication, the studio will automatically bind your active Bearer token from Swagger UI.
 4. Click **Connect**.
 5. Under **Listeners**, add methods your backend broadcasts (e.g. `ReceiveUpdate`).
-6. Under **Invoke Method**, type your server method name and arguments to test two-way communication.
+6. Under **Invoke Method**, type your server method name and arguments (as a JSON array, e.g. `["hello", 42]`) to test two-way communication.

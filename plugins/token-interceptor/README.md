@@ -10,7 +10,7 @@ A seamless authentication bridge that automates enterprise SSO token exchange (s
 - **Automated Token Exchange**: When a user logs in via identity provider, automatically dispatches an exchange request to an internal authentication API (e.g. `/api/auth/token`) to acquire an API Bearer token.
 - **Dual Scheme Support**: Retains the identity provider token in its original security scheme while injecting the exchanged token into the standard `Bearer` scheme.
 - **Cross-Plugin Broadcast**: Broadcasts authentication events to other active plugins (Network History, SignalR Tester, JWT Inspector).
-- **Coordinated Logout**: Clearing the authorization in Swagger UI automatically clears exchanged tokens, localStorage items, and resets dependent plugin sessions.
+- **Coordinated Logout**: Clearing authorization in Swagger UI automatically revokes the exchanged Bearer token, cleans up auto-filled fields, and resets dependent plugin sessions.
 
 ---
 
@@ -23,12 +23,12 @@ A seamless authentication bridge that automates enterprise SSO token exchange (s
 window.SwaggerAuthConfig = {
     // Backend endpoint that accepts the identity token and returns an application Bearer token
     exchangeEndpoint: "/api/auth/token",
-    // Name of the OAuth2 / MSAL scheme in Swagger definition
-    msalSchemeName: "msal_oauth2",
-    // Target security scheme name in Swagger definition for the exchanged token
+    // Name of the OAuth2 / MSAL scheme in Swagger definition (default: "MsalAuth")
+    msalSchemeName: "MsalAuth",
+    // Target security scheme name in Swagger definition for the exchanged token (default: "Bearer")
     appSchemeName: "Bearer",
-    // Request headers to inspect/inject
-    tokenProperty: "token"
+    // Request headers to automatically populate with the raw IDP token
+    targetHeaders: ["AzureAuthorization"]
 };
 </script>
 <script src="/plugins/token-interceptor/swagger-token-interceptor.js"></script>
@@ -48,33 +48,34 @@ app.UseSwaggerUI(c =>
 
 ## Configuration Reference
 
+You can optionally define `window.SwaggerAuthConfig` before `swagger-token-interceptor.js` executes:
+
 | Option | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `exchangeEndpoint` | `string` | `"/api/auth/token"` | Backend API URL for exchanging SSO token for internal app token |
-| `msalSchemeName` | `string` | `"msal"` | Security scheme identifier in OpenAPI spec for IDP / Entra ID |
+| `msalSchemeName` | `string` | `"MsalAuth"` | Security scheme identifier in OpenAPI spec for IDP / Entra ID |
 | `appSchemeName` | `string` | `"Bearer"` | Target security scheme identifier in OpenAPI spec |
-| `storageKey` | `string` | `"swp_bearer_token"` | Key used to store the active Bearer token in `localStorage` |
+| `targetHeaders` | `string[]` | `["AzureAuthorization"]` | List of header names to automatically populate with the raw IDP token |
 
 ---
 
 ## Workflow Diagram
 
-```
+```text
 [User logs in via Swagger "Authorize" (Entra ID / OAuth2)]
                      │
                      ▼
   [Token Interceptor catches MSAL id_token / access_token]
                      │
                      ▼
-  [POST /api/auth/token { token: "..." }]
+  [POST /api/auth/token { Authorization: Bearer <msalToken> }]
                      │
                      ▼
-  [Backend returns API Bearer Token]
+  [Backend returns API Bearer Token (data.access_token)]
                      │
-       ┌─────────────┴─────────────┐
-       ▼                           ▼
-[Set Swagger UI Bearer State]   [Store in localStorage]
-                                   │
-                                   ▼
-            [Notify SignalR Tester & JWT Inspector]
+                     ▼
+  [Apply Bearer Token directly into Swagger UI (ui.authActions.authorize)]
+                     │
+                     ▼
+  [Notify dependent plugins & update JWT status bar]
 ```

@@ -14,7 +14,7 @@ Transforms JSON arrays and paginated API responses into interactive, sortable, s
 - **Interactive Data Table**:
   - Multi-column sort (ascending / descending) by clicking headers.
   - Global client-side text search across all columns and nested values.
-  - Client-side pagination with selectable page sizes (10, 25, 50, 100).
+  - Client-side pagination with selectable page sizes (10, 15, 25, 50).
 - **Nested Object Inspector**: Complex nested objects and arrays render as interactive `{...}` chips that open a detail popover on click instead of unreadable `[object Object]`.
 - **Export Capabilities**: 1-click **Export to CSV** with automatic header mapping and quote escaping.
 - **Non-Destructive View Switcher**: A segmented toggle (`Table` / `JSON`) lets developers seamlessly toggle between the formatted Data Grid and the standard/pretty JSON viewer without losing response state.
@@ -56,22 +56,21 @@ The detection engine parses response bodies according to standard backend archit
 
 ---
 
-## Configuration
+## Configuration Reference
 
-You can customize table behavior via `window.SwaggerDataGridConfig`:
+The data grid behavior is defined via the internal `CONFIG` block in `swagger-data-grid-view.js`:
 
-```javascript
-window.SwaggerDataGridConfig = {
-    // Default page size for tabular views
-    defaultPageSize: 10,
+| Setting | Default | Description |
+| :--- | :--- | :--- |
+| `DEFAULT_CLIENT_PAGE_SIZE` | `15` | Default number of records displayed per page |
+| `PAGE_SIZE_OPTIONS` | `[10, 15, 25, 50]` | Selectable page size choices in the table footer |
+| `PAGE_PARAM_NAMES` | `["page", "pageindex", ...]` | Query parameter names checked for server-side pagination |
+| `PAGE_SIZE_PARAM_NAMES`| `["pagesize", "limit", ...]` | Query parameter names checked for page size |
 
-    // Available page size options in dropdown
-    pageSizeOptions: [10, 25, 50, 100],
+---
 
-    // Maximum depth for nested object flattening in popovers
-    maxDepth: 3,
+## Keyboard Shortcuts
 
-    // CSV filename generator
-    getCsvFilename: (path, method) => `export_${method}_${Date.now()}.csv`
-};
-```
+| Shortcut | Description |
+| :--- | :--- |
+| `Escape` | Close the nested object / array details popover |

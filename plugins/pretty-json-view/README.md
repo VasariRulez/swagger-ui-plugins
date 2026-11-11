@@ -39,19 +39,15 @@ app.UseSwaggerUI(c =>
 
 ---
 
-## Configuration
+## Styling & Display Options
 
-Customize theme and formatting options via `window.SwaggerPrettyJsonConfig`:
+The viewer styles and thresholds are defined internally in `swagger-pretty-json-view.js`:
 
-```javascript
-window.SwaggerPrettyJsonConfig = {
-    // Default indentation spaces (default: 2)
-    indent: 2,
-
-    // Initial expansion level (default: 2; 0 collapses all root nodes)
-    initialExpandDepth: 2,
-
-    // Max length before collapsing long string values
-    truncateStringLength: 500
-};
-```
+- **Adaptive HTTP Color Coding**: Automatically themes the viewer border, badges, and headers based on the endpoint HTTP verb (`GET`: `#61affe`, `POST`: `#49cc90`, `PUT`: `#fca130`, `DELETE`: `#f93e3e`).
+- **String Truncation**: Strings exceeding 250 characters are previewed up to 120 characters with a clickable toggle to show the full string without blowing out the layout.
+- **Toolbar Actions**:
+  - **Espandi tutto**: Expands all child object and array nodes at once.
+  - **Comprimi tutto**: Collapses all child levels.
+  - **Copia**: Copies formatted, indented JSON to the clipboard.
+  - **Scarica**: Triggers a browser download of the response as a `.json` file.
+  - **Originale**: Toggles between this interactive tree view and Swagger UI's raw text response block.

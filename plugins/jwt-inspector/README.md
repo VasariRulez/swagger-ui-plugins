@@ -6,14 +6,14 @@ A real-time JWT token decoder, claims explorer, and expiration countdown monitor
 
 ## Features
 
-- **Automatic Swagger UI Token Detection**: Intercepts authorization tokens stored in Swagger UI (`auth` state in `window.ui`) and `localStorage`.
+- **Automatic Swagger UI Token Detection**: Intercepts authorization tokens stored in Swagger UI's Redux state (`auth.authorized` in `window.ui`).
 - **Dual-Token Support**: Decodes both standard Bearer tokens and enterprise identity tokens (Microsoft Entra ID / MSAL / OpenID Connect).
 - **Header & Payload Claims Viewer**:
   - Formatted claims table with search filter (`sub`, `iss`, `aud`, `exp`, `roles`, `email`, etc.).
   - Color-coded JSON view of raw claims.
 - **Live Expiration Clock**:
   - Real-time countdown timer (`Expires in: 14m 32s`).
-  - Visual status pill: Active (Green), Expiring Soon (< 5 mins, Amber), Expired (Red).
+  - Visual status pill: Active (Green), Expiring Soon (< 2 mins, Amber), Expired (Red).
 - **1-Click Copy & Debugger Link**:
   - Copy raw token or payload with a single click.
   - One-click link to open the token on `jwt.ms` or `jwt.io`.
@@ -42,26 +42,16 @@ app.UseSwaggerUI(c =>
 
 ---
 
-## Configuration
+## Configuration Reference
 
-Optionally configure token storage keys and warning thresholds via `window.SwaggerJwtConfig`:
+The inspector's behavior is defined via the internal `CONFIG` block in `swagger-jwt-inspector.js`:
 
-```javascript
-window.SwaggerJwtConfig = {
-    // Custom storage keys to watch for tokens
-    tokenStorageKeys: [
-        "swp_bearer_token",
-        "access_token",
-        "id_token"
-    ],
-
-    // Warning threshold in minutes for "Expiring Soon" state (default: 5)
-    expiringThresholdMinutes: 5,
-
-    // Preferred external debugger link: "jwt.ms" | "jwt.io" (default: "jwt.ms")
-    externalDebugger: "jwt.ms"
-};
-```
+| Setting | Default | Description |
+| :--- | :--- | :--- |
+| `APP_BEARER_SCHEME` | `"Bearer"` | Name of the primary API Bearer scheme registered in Swagger |
+| `MSAL_SCHEME` | `"MsalAuth"` | Name of the enterprise IDP / OAuth2 scheme registered in Swagger |
+| `WARNING_THRESHOLD_SECONDS` | `120` (2 mins) | Seconds remaining before expiration when the badge turns amber |
+| `COUNTDOWN_TICK_INTERVAL_MS` | `1000` ms | Refresh frequency of the countdown display |
 
 ---
 
@@ -69,5 +59,7 @@ window.SwaggerJwtConfig = {
 
 | Shortcut | Description |
 | :--- | :--- |
-| `Alt + J` | Toggle JWT Inspector drawer |
-| `Escape` | Close inspector drawer |
+| `Escape` | Close the JWT Inspector modal dialog |
+
+> [!NOTE]
+> The claims inspector modal is opened by clicking **"Ispeziona Claims"** in the JWT status bar (located directly below Swagger UI's Authorize section) or by clicking the key icon in the **Activity Bar**.

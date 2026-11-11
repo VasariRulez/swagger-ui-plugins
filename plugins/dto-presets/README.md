@@ -10,7 +10,7 @@ A productivity tool for Swagger UI that manages request body presets, polymorphi
 - **Custom Developer Presets**: Save, name, and manage custom request body configurations directly inside Swagger UI; saved in `localStorage` scoped per endpoint.
 - **Predefined Presets Support**: Easily load standard enterprise mock scenarios (e.g. `Minimal Payload`, `Full Enterprise Payload`, `Edge Case - Null Fields`).
 - **1-Click Apply**: Instantly injects selected JSON directly into Swagger's editable request textarea with syntax formatting and change event triggering.
-- **Clean Preset Management**: Delete, duplicate, and export developer presets to share with team members.
+- **Clean Preset Management**: Save custom presets per endpoint in `localStorage` and delete obsolete ones directly from the toolbar.
 
 ---
 
@@ -34,56 +34,27 @@ app.UseSwaggerUI(c =>
 
 ---
 
-## Defining Global Presets
+## How Presets Are Generated
 
-You can pre-configure predefined presets for your API endpoints by defining `window.SwaggerPresetsConfig` before loading the script:
+The plugin automatically analyzes your OpenAPI specification (`requestBody` schema) to build presets with zero manual configuration:
 
-```javascript
-window.SwaggerPresetsConfig = {
-    // Key format: "[METHOD] [PATH]"
-    "POST /api/v1/orders": [
-        {
-            name: "Standard Purchase Order",
-            description: "Default order with 2 line items and credit card billing",
-            payload: {
-                customerId: "cust-001",
-                currency: "EUR",
-                items: [
-                    { sku: "ITEM-A", quantity: 2, price: 19.99 },
-                    { sku: "ITEM-B", quantity: 1, price: 49.50 }
-                ]
-            }
-        },
-        {
-            name: "Polymorphic Express Order ($type)",
-            description: "Order using polymorphic VIP customer dispatch",
-            payload: {
-                $type: "ExpressOrderDto",
-                customerId: "cust-vip-99",
-                priority: "High",
-                expressCourier: "DHL_EXPRESS"
-            }
-        }
-    ],
+### 1. Automatic Schema Mocking
+- **Full Schema Mock**: Generates realistic dummy data based on property types, OpenAPI formats (`date-time`, `uuid`, `email`), and default/enum values.
+- **Minimal Required**: Filters properties to only include fields marked as `required` in the OpenAPI schema.
 
-    "PUT /api/v1/users/{id}": [
-        {
-            name: "Update Profile Only",
-            payload: {
-                firstName: "Jane",
-                lastName: "Doe",
-                status: "Active"
-            }
-        }
-    ]
-};
-```
+### 2. Polymorphic Inheritance & Discriminators
+- When a schema contains inheritance hierarchies or type discriminators (e.g. `$type`, `discriminator`, `oneOf`, `anyOf`), the plugin inspects the definitions and provides specialized presets for each concrete subtype with its discriminator pre-injected.
+
+### 3. Custom Developer Presets
+- Custom payloads saved by developers are stored in `localStorage` under the key prefix `swp_swagger_preset_{method}_{path}` and remain available across page reloads.
 
 ---
 
 ## Developer Workflow
 
-1. Expand any endpoint that accepts a request body.
-2. A new dropdown and preset toolbar appear right above the request body editor.
-3. Select any predefined preset to immediately populate the text area.
-4. Modify the payload and click **"Save as New Preset..."** to store it permanently in your browser for future testing sessions.
+1. Expand any endpoint in Swagger UI that accepts a request body.
+2. The **DTO Presets** toolbar appears directly above the body textarea.
+3. Select an automatic preset (Full, Minimal, or Polymorphic subtype) from the dropdown.
+4. Click **Applica** (Apply) to inject the JSON into Swagger's editable textarea, or **Copia** (Copy) to place it on your clipboard.
+5. Customize the JSON values in the textarea and click **Salva** (Save) to store it as a permanent custom preset for that endpoint.
+6. To remove a previously saved custom preset, select it from the dropdown and click **Elimina** (Delete).

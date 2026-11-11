@@ -108,12 +108,13 @@ Include the script tags after `swagger-ui-bundle.js`. See [examples/static-html/
 
 | Shortcut | Action | Plugin |
 | :--- | :--- | :--- |
-| `Ctrl + K` / `Cmd + K` or `/` | Open Spotlight Search | Spotlight Search |
-| `Alt + /` or `?` | Open Extensions Guide | Activity Bar |
-| `Alt + H` | Toggle Network History Drawer | Network History |
-| `Alt + S` | Toggle SignalR Studio Drawer | SignalR Tester |
-| `Alt + J` | Toggle JWT Inspector Drawer | JWT Inspector |
-| `Escape` | Close any active modal or drawer | All Plugins |
+| `Ctrl + K` / `Cmd + K` or `/` | Open Spotlight Search command palette | Spotlight Search |
+| `↑` / `↓` | Navigate search results in Spotlight | Spotlight Search |
+| `Enter` | Select and jump to endpoint in Spotlight | Spotlight Search |
+| `Escape` | Close any active modal, popover, or drawer | All Plugins |
+
+> [!NOTE]
+> Drawers and inspection tools (Network History, SignalR Studio, JWT Inspector, Extensions Guide) are opened directly from the vertical **Activity Bar** docked on the left edge.
 
 ---
 
