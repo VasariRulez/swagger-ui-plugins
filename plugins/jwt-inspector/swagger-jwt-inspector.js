@@ -45,11 +45,7 @@
         EXTERNAL_DEBUGGER: userConfig.externalDebugger === "jwt.io" ? "jwt.io" : "jwt.ms",
 
         /** Fallback localStorage keys to inspect for tokens */
-        FALLBACK_STORAGE_KEYS: Array.isArray(userConfig.tokenStorageKeys) ? userConfig.tokenStorageKeys : [
-            "swp_bearer_token",
-            "access_token",
-            "id_token"
-        ],
+        FALLBACK_STORAGE_KEYS: Array.isArray(userConfig.tokenStorageKeys) ? userConfig.tokenStorageKeys : [],
 
         /** Polling discovery interval for Swagger UI mounting */
         UI_DISCOVERY_INTERVAL_MS: 200,

@@ -55,7 +55,6 @@ You can optionally configure the exchange behavior by defining `window.SwaggerAu
   window.SwaggerAuthConfig = {
     exchangeEndpoint: "/api/auth/token",    // Backend URL for exchanging SSO token for internal app token
     tokenProperty: "data.access_token",     // Dot-notated property path in response JSON (default: "data.access_token")
-    storageKey: "access_token",             // LocalStorage key to save the exchanged token (default: "access_token")
     msalSchemeName: "MsalAuth",             // Security scheme identifier for IDP in OpenAPI spec
     appSchemeName: "Bearer",                // Target security scheme identifier in OpenAPI spec
     targetHeaders: ["AzureAuthorization"]   // Headers to populate automatically with raw IDP token
@@ -68,7 +67,6 @@ You can optionally configure the exchange behavior by defining `window.SwaggerAu
 | :--- | :--- | :--- | :--- |
 | `exchangeEndpoint` | `string` | `"/api/auth/token"` | Backend API URL for exchanging SSO token for internal app token |
 | `tokenProperty` | `string` | `"data.access_token"` | Dot-separated path to the token string inside exchange response JSON |
-| `storageKey` | `string` | `"access_token"` | Key used in `localStorage` to persist exchanged token |
 | `msalSchemeName` | `string` | `"MsalAuth"` | Security scheme identifier in OpenAPI spec for IDP / Entra ID |
 | `appSchemeName` | `string` | `"Bearer"` | Target security scheme identifier in OpenAPI spec |
 | `targetHeaders` | `string[]` | `["AzureAuthorization"]` | List of header names to automatically populate with the raw IDP token |

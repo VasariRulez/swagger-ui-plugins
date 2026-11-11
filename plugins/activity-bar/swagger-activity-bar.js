@@ -989,8 +989,18 @@
      * Registers the runtime language switcher button docked at the bottom of the Activity Bar.
      */
     let isLangPopoverOpen = false;
+    let langPopoverDocClickListener = null;
+    let langPopoverKeydownListener = null;
 
     function closeLanguagePopover() {
+        if (langPopoverDocClickListener) {
+            document.removeEventListener("click", langPopoverDocClickListener);
+            langPopoverDocClickListener = null;
+        }
+        if (langPopoverKeydownListener) {
+            window.removeEventListener("keydown", langPopoverKeydownListener);
+            langPopoverKeydownListener = null;
+        }
         const existing = document.getElementById("swp-language-popover");
         if (existing) existing.remove();
         isLangPopoverOpen = false;
@@ -1058,21 +1068,21 @@
         document.body.appendChild(popover);
 
         setTimeout(() => {
-            const onDocClick = (e) => {
-                if (!popover.contains(e.target) && !e.target.closest('#swagger-activity-bar-item-language-switcher')) {
+            if (!isLangPopoverOpen) return;
+
+            langPopoverDocClickListener = (e) => {
+                if (!popover.contains(e.target) && !e.target.closest('#activity-btn-language-switcher')) {
                     closeLanguagePopover();
-                    document.removeEventListener("click", onDocClick);
                 }
             };
-            document.addEventListener("click", onDocClick);
+            document.addEventListener("click", langPopoverDocClickListener);
 
-            const onKey = (e) => {
+            langPopoverKeydownListener = (e) => {
                 if (e.key === "Escape") {
                     closeLanguagePopover();
-                    window.removeEventListener("keydown", onKey);
                 }
             };
-            window.addEventListener("keydown", onKey);
+            window.addEventListener("keydown", langPopoverKeydownListener);
         }, 10);
     }
 

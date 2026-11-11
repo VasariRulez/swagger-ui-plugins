@@ -125,12 +125,6 @@
     const TOKEN_PROPERTY = userConfig.tokenProperty || null;
 
     /** 
-     * Optional localStorage key for persisting active Bearer token.
-     * @type {string|null}
-     */
-    const STORAGE_KEY = userConfig.storageKey || null;
-
-    /** 
      * List of headers to populate with raw IDP tokens.
      * @type {string[]}
      */
@@ -382,11 +376,6 @@
         // Alert alla scadenza esatta del token
         expiredTimerId = window.setTimeout(() => {
             clearAuthorizedScheme(APP_SCHEME_NAME);
-            if (STORAGE_KEY) {
-                try {
-                    localStorage.removeItem(STORAGE_KEY);
-                } catch {}
-            }
             showToast(
                 t("tokenExpired", "Application token has expired. Please re-authenticate."),
                 "error"
@@ -850,15 +839,6 @@
                 }
             });
 
-            // Persist token in localStorage if configured
-            if (STORAGE_KEY) {
-                try {
-                    localStorage.setItem(STORAGE_KEY, internalToken);
-                } catch (e) {
-                    console.warn("[Swagger Auth] Could not store token in localStorage:", e);
-                }
-            }
-
             // Schedule expiration timer for newly applied token
             scheduleTokenExpirationAlerts(internalToken);
         } catch (error) {
@@ -897,12 +877,6 @@
 
         clearAuthorizedScheme(APP_SCHEME_NAME);
         clearAutoFilledInputFields();
-
-        if (STORAGE_KEY) {
-            try {
-                localStorage.removeItem(STORAGE_KEY);
-            } catch {}
-        }
 
         showToast(t("logoutNotice", "Microsoft session closed. Resetting session..."), "info");
 

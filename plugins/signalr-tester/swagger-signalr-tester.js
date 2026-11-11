@@ -83,6 +83,7 @@
         en: {
             activityBarTitle: "SignalR Live Hub Tester",
             activityBarAria: "SignalR Tester",
+            fallbackTriggerTitle: "SignalR Live Hub Tester (Open / Close Console)",
             drawerTitle: "SignalR Hub Tester Console",
             closeDrawerTitle: "Close console (ESC)",
             statusDisconnected: "DISCONNECTED",
@@ -101,11 +102,11 @@
             useAuthLabel: "Send active application Bearer Token",
             connectBtn: "▶ Connect",
             disconnectBtn: "⏹ Disconnect",
-            sectionInvoke: "2. Invoke Method (Client -> Hub)",
+            sectionInvoke: "2. Method Invocation (Client to Server)",
             methodNamePlaceholder: "Method Name (e.g. JoinGroup, SendMessage)",
             invokeBtn: "🚀 Invoke",
             jsonArgsLabel: "JSON Arguments (Array, e.g. [\"value\"] or [{\"id\": \"...\"}]):",
-            sectionListen: "3. Event Listeners (Broadcasts)",
+            sectionListen: "3. Broadcast Event Listeners",
             activeBadge: "{count} active",
             newListenerPlaceholder: "Event name (e.g. ReceiveTestMessage)",
             addListenerBtn: "+ Listen",
@@ -120,11 +121,33 @@
             disconnectedMsg: "Disconnected from Hub",
             reconnectingMsg: "Connection lost. Attempting reconnection...",
             reconnectedMsg: "Reconnected successfully.",
-            errorTitle: "SignalR Error"
+            errorTitle: "SignalR Error",
+            alertSpecifyMethod: "Please specify the method name.",
+            alertInvalidJsonArgs: 'Arguments must be formatted as valid JSON (e.g. ["value"] or [123]).',
+            logSignalRNotLoaded: "SignalR library not loaded on page. Unable to establish connection.",
+            logSpecifyHubUrl: "Please specify a valid URL or path for the Hub.",
+            logConnecting: "Connecting to {url}...",
+            logReconnecting: "Automatic reconnection in progress... {error}",
+            logReconnected: "Reconnected successfully! New ConnectionId: {id}",
+            logConnectionInterrupted: "Connection interrupted by server: {error}",
+            logConnectionClosed: "Connection closed normally.",
+            logConnectedSuccess: "Connected successfully to Hub! ConnectionId: {id}",
+            logConnectionError: "Error connecting to Hub: {error}",
+            logDisconnecting: "Disconnecting...",
+            logInvokeNotConnected: "Unable to invoke method: SignalR connection is not active.",
+            logSpecifyMethod: "Please specify the method name to invoke.",
+            logSendingInvoke: "Sending invoke '{name}' with arguments:",
+            logInvokeResponse: "Response from '{name}' (⏱ {ms}ms):",
+            logVoidCompleted: "void (completed)",
+            logInvokeError: "Error invoking '{name}' (⏱ {ms}ms): {error}",
+            logEventReceived: "Event received: '{event}'",
+            logListeningEvent: "Listening to event '{event}'.",
+            logRemovedEvent: "Stopped listening to event '{event}'."
         },
         it: {
             activityBarTitle: "SignalR Live Hub Tester",
             activityBarAria: "SignalR Tester",
+            fallbackTriggerTitle: "SignalR Live Hub Tester (Apri / Chiudi Console)",
             drawerTitle: "Console SignalR Hub Tester",
             closeDrawerTitle: "Chiudi console (ESC)",
             statusDisconnected: "DISCONNESSO",
@@ -132,7 +155,7 @@
             statusConnected: "CONNESSO",
             statusReconnecting: "RICONNESSIONE...",
             connectedTo: "Connesso a: {url}",
-            sectionConn: "1. Connessione all'Hub (Generica)",
+            sectionConn: "1. Connessione all'Hub",
             sectionConnToggle: "Clicca per espandere / collassare",
             hubPathLabel: "Percorso Hub (URL o Preset):",
             selectHubPlaceholder: "-- Seleziona un Hub suggerito o recente --",
@@ -143,7 +166,7 @@
             useAuthLabel: "Invia Bearer Token applicativo attivo",
             connectBtn: "▶ Connetti",
             disconnectBtn: "⏹ Disconnetti",
-            sectionInvoke: "2. Invocazione Metodi (Client -> Hub)",
+            sectionInvoke: "2. Invocazione Metodi (Client verso Server)",
             methodNamePlaceholder: "Nome Metodo (es. JoinGroup, SendMessage)",
             invokeBtn: "🚀 Invoca",
             jsonArgsLabel: "Argomenti JSON (Array, es. [\"valore\"] o [{\"id\": \"...\"}]):",
@@ -152,7 +175,7 @@
             newListenerPlaceholder: "Nome evento (es. ReceiveTestMessage)",
             addListenerBtn: "+ Ascolta",
             removeListenerTitle: "Rimuovi ascolto",
-            sectionLog: "4. Log Eventi in Tempo Reale",
+            sectionLog: "4. Log Attività in Tempo Reale",
             copyLogBtn: "📋 Copia",
             clearLogBtn: "🗑 Pulisci",
             emptyLog: "Nessun evento registrato. Connettiti a un Hub per iniziare.",
@@ -162,7 +185,28 @@
             disconnectedMsg: "Disconnesso dall'Hub",
             reconnectingMsg: "Connessione interrotta. Tentativo di riconnessione...",
             reconnectedMsg: "Riconnessione completata con successo.",
-            errorTitle: "Errore SignalR"
+            errorTitle: "Errore SignalR",
+            alertSpecifyMethod: "Specificare il nome del metodo da invocare.",
+            alertInvalidJsonArgs: "Gli argomenti devono essere formattati come JSON valido (es. [\"valore\"] o [123]).",
+            logSignalRNotLoaded: "Libreria SignalR non caricata in pagina. Impossibile stabilire la connessione.",
+            logSpecifyHubUrl: "Specificare un URL o percorso valido per l'Hub.",
+            logConnecting: "Connessione in corso a {url}...",
+            logReconnecting: "Riconnessione automatica in corso... {error}",
+            logReconnected: "Riconnesso con successo! Nuovo ConnectionId: {id}",
+            logConnectionInterrupted: "Connessione interrotta dal server: {error}",
+            logConnectionClosed: "Connessione chiusa regolarmente.",
+            logConnectedSuccess: "Connesso con successo all'Hub! ConnectionId: {id}",
+            logConnectionError: "Errore durante la connessione all'Hub: {error}",
+            logDisconnecting: "Disconnessione in corso...",
+            logInvokeNotConnected: "Impossibile invocare il metodo: connessione SignalR non attiva.",
+            logSpecifyMethod: "Specificare il nome del metodo da invocare.",
+            logSendingInvoke: "Invio invoke '{name}' con argomenti:",
+            logInvokeResponse: "Risposta da '{name}' (⏱ {ms}ms):",
+            logVoidCompleted: "void (completato)",
+            logInvokeError: "Errore invocazione '{name}' (⏱ {ms}ms): {error}",
+            logEventReceived: "Evento ricevuto: '{event}'",
+            logListeningEvent: "In ascolto dell'evento '{event}'.",
+            logRemovedEvent: "Rimosso ascolto dell'evento '{event}'."
         }
     };
 
@@ -234,17 +278,10 @@
     // =========================================================================
 
     /**
-     * Recupera il Bearer Token applicativo attivo da Swagger UI o dallo storage locale.
+     * Retrieves active application Bearer token directly from Swagger UI Redux store.
      * @returns {string|null}
      */
     function getActiveBearerToken() {
-        // Tentativo 1: SessionStorage impostato da swagger-token-interceptor.js
-        const sessionToken = sessionStorage.getItem("bearer_token") || localStorage.getItem("swp_bearer_token");
-        if (sessionToken && sessionToken.startsWith("eyJ")) {
-            return sessionToken;
-        }
-
-        // Tentativo 2: Store Redux di Swagger UI
         try {
             const ui = window.ui;
             if (ui && typeof ui.getState === "function") {
@@ -314,7 +351,7 @@
      */
     async function connectToHub(hubUrl, useAuth = true) {
         if (typeof window.signalR === "undefined") {
-            addLog("error", "Libreria SignalR non caricata in pagina. Impossibile stabilire la connessione.");
+            addLog("error", t("logSignalRNotLoaded", "SignalR library not loaded on page. Unable to establish connection."));
             return false;
         }
 
@@ -324,12 +361,12 @@
 
         const normalizedUrl = (hubUrl || "").trim();
         if (!normalizedUrl) {
-            addLog("error", "Specificare un URL o percorso valido per l'Hub.");
+            addLog("error", t("logSpecifyHubUrl", "Please specify a valid URL or path for the Hub."));
             return false;
         }
 
         updateStatus("connecting");
-        addLog("info", `Connessione in corso a ${normalizedUrl}...`);
+        addLog("info", t("logConnecting", `Connecting to ${normalizedUrl}...`, { url: normalizedUrl }));
 
         try {
             const token = useAuth ? getActiveBearerToken() : null;
@@ -371,22 +408,22 @@
             // Configure connection lifecycle callbacks
             state.connection.onreconnecting((error) => {
                 updateStatus("reconnecting");
-                addLog("warn", `Riconnessione automatica in corso... ${error ? error.message : ""}`);
+                addLog("warn", t("logReconnecting", `Automatic reconnection in progress... ${error ? error.message : ""}`, { error: error ? error.message : "" }));
             });
 
             state.connection.onreconnected((newConnectionId) => {
                 updateStatus("connected");
                 state.connectionId = newConnectionId;
-                addLog("success", `Riconnesso con successo! Nuovo ConnectionId: ${newConnectionId}`);
+                addLog("success", t("logReconnected", `Reconnected successfully! New ConnectionId: ${newConnectionId}`, { id: newConnectionId }));
             });
 
             state.connection.onclose((error) => {
                 updateStatus("disconnected");
                 state.connectionId = null;
                 if (error) {
-                    addLog("error", `Connessione interrotta dal server: ${error.message}`);
+                    addLog("error", t("logConnectionInterrupted", `Connection interrupted by server: ${error.message}`, { error: error.message }));
                 } else {
-                    addLog("info", "Connessione chiusa regolarmente.");
+                    addLog("info", t("logConnectionClosed", "Connection closed normally."));
                 }
             });
 
@@ -401,7 +438,7 @@
             state.connectionId = state.connection.connectionId || "Disponibile";
             state.connectedAt = new Date();
             updateStatus("connected");
-            addLog("success", `Connesso con successo all'Hub! ConnectionId: ${state.connectionId}`);
+            addLog("success", t("logConnectedSuccess", `Connected successfully to Hub! ConnectionId: ${state.connectionId}`, { id: state.connectionId }));
 
             // Save last used Hub to localStorage and update history
             localStorage.setItem(CONFIG.STORAGE_KEYS.LAST_HUB, normalizedUrl);
@@ -411,7 +448,7 @@
         } catch (error) {
             updateStatus("disconnected");
             state.connection = null;
-            addLog("error", `Error connecting to Hub: ${error.message || error}`);
+            addLog("error", t("logConnectionError", `Error connecting to Hub: ${error.message || error}`, { error: error.message || error }));
             return false;
         }
     }
@@ -427,7 +464,7 @@
         }
 
         try {
-            addLog("info", "Disconnessione in corso...");
+            addLog("info", t("logDisconnecting", "Disconnecting..."));
             await state.connection.stop();
         } catch (err) {
             console.warn("[SignalR Tester] Error stopping connection:", err);
@@ -446,27 +483,27 @@
      */
     async function invokeHubMethod(methodName, args = []) {
         if (!state.connection || state.status !== "connected") {
-            addLog("error", "Unable to invoke method: SignalR connection is not active.");
+            addLog("error", t("logInvokeNotConnected", "Unable to invoke method: SignalR connection is not active."));
             return;
         }
 
         const name = (methodName || "").trim();
         if (!name) {
-            addLog("error", "Please specify the method name to invoke.");
+            addLog("error", t("logSpecifyMethod", "Please specify the method name to invoke."));
             return;
         }
 
         const startTime = Date.now();
-        addLog("sent", `Invio invoke '${name}' con argomenti:`, args);
+        addLog("sent", t("logSendingInvoke", `Sending invoke '${name}' with arguments:`, { name }), args);
 
         try {
             const result = await state.connection.invoke(name, ...args);
             const durationMs = Date.now() - startTime;
-            addLog("success", `Risposta da '${name}' (⏱ ${durationMs}ms):`, result !== undefined ? result : "void (completato)");
+            addLog("success", t("logInvokeResponse", `Response from '${name}' (⏱ ${durationMs}ms):`, { name, ms: durationMs }), result !== undefined ? result : t("logVoidCompleted", "void (completed)"));
             return result;
         } catch (error) {
             const durationMs = Date.now() - startTime;
-            addLog("error", `Error invoking '${name}' (⏱ ${durationMs}ms): ${error.message || error}`);
+            addLog("error", t("logInvokeError", `Error invoking '${name}' (⏱ ${durationMs}ms): ${error.message || error}`, { name, ms: durationMs, error: error.message || error }));
             throw error;
         }
     }
@@ -483,7 +520,7 @@
 
         state.connection.on(eventName, (...args) => {
             const payload = args.length === 1 ? args[0] : (args.length === 0 ? null : args);
-            addLog("received", `Evento ricevuto: '${eventName}'`, payload);
+            addLog("received", t("logEventReceived", `Event received: '${eventName}'`, { event: eventName }), payload);
         });
     }
 
@@ -499,7 +536,7 @@
         bindListenerToConnection(name);
         saveListenersToStorage();
         renderListenersList();
-        addLog("info", `In ascolto dell'evento '${name}'.`);
+        addLog("info", t("logListeningEvent", `Listening to event '${name}'.`, { event: name }));
     }
 
     /**
@@ -513,7 +550,7 @@
         }
         saveListenersToStorage();
         renderListenersList();
-        addLog("info", `Rimosso ascolto dell'evento '${eventName}'.`);
+        addLog("info", t("logRemovedEvent", `Stopped listening to event '${eventName}'.`, { event: eventName }));
     }
 
     /**
@@ -1479,7 +1516,7 @@
         btnInvoke?.addEventListener("click", async () => {
             const methodName = methodInput.value.trim();
             if (!methodName) {
-                alert("Please specify the method name.");
+                alert(t("alertSpecifyMethod", "Please specify the method name."));
                 return;
             }
 
@@ -1490,7 +1527,7 @@
                     const parsed = JSON.parse(rawArgs);
                     args = Array.isArray(parsed) ? parsed : [parsed];
                 } catch {
-                    alert("Gli argomenti devono essere formattati come JSON valido (es. [\"valore\"] o [123]).");
+                    alert(t("alertInvalidJsonArgs", 'Arguments must be formatted as valid JSON (e.g. ["value"] or [123]).'));
                     return;
                 }
             }
@@ -1727,10 +1764,13 @@
             populateHubDropdown();
             updateTokenIndicator();
             renderListenersList();
-            updateStatusBadge(state.status);
+            updateStatus(state.status);
 
             const drawer = document.getElementById(CONFIG.ELEMENT_IDS.DRAWER);
             if (drawer) {
+                drawer.querySelectorAll(".signalr-section-header").forEach((h) => {
+                    h.title = t("sectionConnToggle", "Click to expand / collapse");
+                });
                 const title = drawer.querySelector(".swp-sig-title");
                 if (title) title.textContent = t("drawerTitle", "SignalR Hub Tester Console");
                 const closeBtn = drawer.querySelector(".btn-close-drawer");
