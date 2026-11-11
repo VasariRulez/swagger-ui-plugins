@@ -6,7 +6,7 @@ A macOS Spotlight & VS Code-style Command Palette (`Ctrl + K` / `Cmd + K`) for b
 
 ## Features
 
-- **Global Command Palette**: Instant modal invoked via `Ctrl + K` (Windows/Linux), `Cmd + K` (macOS), or the `/` key.
+- **Global Command Palette**: Instant modal invoked via `Ctrl + K` (Windows/Linux), `Cmd + K` (macOS), the `/` key, or the search lens icon in the Activity Bar.
 - **Fuzzy Search Algorithm**: Matches against HTTP methods (`GET`, `POST`), endpoint paths (`/api/v1/...`), operation IDs, tags/controllers, and summary descriptions.
 - **Keyboard Navigation**: Full arrow-key navigation (`↑` / `↓`), `Enter` to select, and `Escape` to close.
 - **Smooth Glow Deep-Linking**: Automatically expands collapsed controller sections, scrolls smoothly to the target operation, and highlights it with a temporary pulse animation.
@@ -72,6 +72,9 @@ You can customize shortcuts, thresholds, and behavior by defining `window.Swagge
 | `↑` / `↓` | Navigate search results |
 | `Enter` | Select endpoint, jump to it, and expand |
 | `Escape` | Dismiss modal |
+
+> [!NOTE]
+> The Spotlight Command Palette is opened via keyboard shortcut (`Ctrl + K` / `Cmd + K` or `/`) or by clicking the search lens icon in the **Activity Bar** (or the search bar in the navbar).
 
 ---
 

@@ -76,7 +76,7 @@ You can customize the JWT Inspector by providing `window.SwaggerJwtConfig`:
 | `Escape` | Close the JWT Inspector modal dialog |
 
 > [!NOTE]
-> The claims inspector modal is opened by clicking **"Inspect Claims"** in the JWT status bar (located directly below Swagger UI's Authorize section) or by clicking the key icon in the **Activity Bar**.
+> The claims inspector modal is opened by clicking **"Inspect Claims"** in the JWT status bar (located directly below Swagger UI's Authorize section).
 
 ---
 

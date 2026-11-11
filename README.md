@@ -114,7 +114,7 @@ Include the script tags after `swagger-ui-bundle.js`. See [examples/static-html/
 | `Escape` | Close any active modal, popover, or drawer | All Plugins |
 
 > [!NOTE]
-> Drawers and inspection tools (Network History, SignalR Studio, JWT Inspector, Extensions Guide) are opened directly from the vertical **Activity Bar** docked on the left edge.
+> Drawers and inspection tools (Network History, SignalR Studio, Spotlight Search, Extensions Guide) are opened directly from the vertical **Activity Bar** docked on the left edge.
 
 ---
 
