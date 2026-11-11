@@ -65,7 +65,7 @@ You can customize the JWT Inspector by providing `window.SwaggerJwtConfig`:
 | `msalSchemeName` | `string` | `"MsalAuth"` | Name of the enterprise IDP / OAuth2 scheme registered in Swagger UI |
 | `expiringThresholdMinutes` | `number` | `2` | Minutes remaining before expiration when countdown turns amber/warning |
 | `externalDebugger` | `string` | `"jwt.ms"` | Online JWT debugger opened via footer button (`"jwt.ms"` or `"jwt.io"`) |
-| `tokenStorageKeys` | `string[]` | `["access_token", ...]` | Keys searched in `localStorage` if token is absent from Redux |
+| `tokenStorageKeys` | `string[]` | `[]` | Optional fallback keys searched in `localStorage` only if token is absent from Redux |
 
 ---
 
