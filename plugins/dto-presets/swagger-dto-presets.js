@@ -28,6 +28,8 @@
     // =========================================================================
     // 1. CONFIGURAZIONE GENERALE (Modificabile dallo sviluppatore)
     // =========================================================================
+    const userConfig = window.SwaggerPresetsConfig || {};
+
     const CONFIG = {
         /** LocalStorage key prefix for user-saved custom presets */
         STORAGE_KEY_PREFIX: "swp_swagger_preset_",
@@ -122,7 +124,8 @@
     function getActiveLocale() {
         const stored = localStorage.getItem("swp_swagger_i18n_locale");
         if (stored === "it" || stored === "en") return stored;
-        if (userConfig.locale === "it" || userConfig.locale === "en") return userConfig.locale;
+        const cfg = window.SwaggerPresetsConfig || userConfig;
+        if (cfg.locale === "it" || cfg.locale === "en") return cfg.locale;
         if (window.SwaggerI18nConfig && (window.SwaggerI18nConfig.locale === "it" || window.SwaggerI18nConfig.locale === "en")) {
             return window.SwaggerI18nConfig.locale;
         }
@@ -138,8 +141,9 @@
      */
     function t(key, defaultText, params = {}) {
         const locale = getActiveLocale();
+        const cfg = window.SwaggerPresetsConfig || userConfig;
         const hostOverrides = (window.SwaggerI18nConfig && window.SwaggerI18nConfig.messages && window.SwaggerI18nConfig.messages[locale]) ||
-                              (userConfig.messages && userConfig.messages[locale]);
+                              (cfg.messages && cfg.messages[locale]);
         let str = (hostOverrides && hostOverrides[key]) ||
                   (I18N[locale] && I18N[locale][key]) ||
                   (I18N["en"] && I18N["en"][key]) ||
@@ -636,12 +640,16 @@
      * @returns {Array<Object>}
      */
     function getGlobalPresetsForEndpoint(method, path) {
-        const globalConfig = window.SwaggerPresetsConfig;
+        const globalConfig = window.SwaggerPresetsConfig || userConfig;
         if (!globalConfig || typeof globalConfig !== "object") return [];
+
+        const endpointsMap = (globalConfig.presets && typeof globalConfig.presets === "object")
+            ? globalConfig.presets
+            : globalConfig;
 
         const normalizedUpper = `${method.toUpperCase()} ${path}`;
         const normalizedLower = `${method.toLowerCase()} ${path}`;
-        const match = globalConfig[normalizedUpper] || globalConfig[normalizedLower] || globalConfig[path];
+        const match = endpointsMap[normalizedUpper] || endpointsMap[normalizedLower] || endpointsMap[path];
 
         return Array.isArray(match) ? match : [];
     }
