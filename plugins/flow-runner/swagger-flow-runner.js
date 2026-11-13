@@ -144,7 +144,18 @@
             varModalTitle: "Variable Detail",
             varEditTitle: "Variable Value (Editable):",
             btnSaveVar: "💾 Save Value",
-            varSavedFeedback: "✓ Saved to Session!"
+            varSavedFeedback: "✓ Saved to Session!",
+            btnOpenVarsDrawer: "Manage",
+            openVarsDrawerTooltip: "Open Variables Drawer (browse, filter and inspect)",
+            varsDrawerTitle: "Session Variables Manager",
+            varsSearchPlaceholder: "Filter variables by name or content...",
+            btnAddVariable: "➕ Add Variable",
+            promptAddVarName: "Enter variable name (without {{}}):",
+            promptAddVarValue: "Enter initial variable value:",
+            btnExportVars: "📥 Export Vars",
+            btnImportVars: "📤 Import Vars",
+            noMatchingVars: "No matching variables found.",
+            varSavedInline: "✓ Saved!"
         },
         it: {
             activityBarTitle: "Runner Flussi API e Scenari a Catena",
@@ -227,7 +238,18 @@
             varModalTitle: "Dettaglio Variabile",
             varEditTitle: "Valore Variabile (Modificabile):",
             btnSaveVar: "💾 Salva Valore",
-            varSavedFeedback: "✓ Salvato nella Sessione!"
+            varSavedFeedback: "✓ Salvato nella Sessione!",
+            btnOpenVarsDrawer: "Gestisci",
+            openVarsDrawerTooltip: "Apri il Cassetto Variabili (esplora, filtra e ispeziona)",
+            varsDrawerTitle: "Gestione Variabili di Sessione",
+            varsSearchPlaceholder: "Filtra variabili per nome o contenuto...",
+            btnAddVariable: "➕ Aggiungi Variabile",
+            promptAddVarName: "Inserisci il nome della variabile (senza {{}}):",
+            promptAddVarValue: "Inserisci il valore iniziale:",
+            btnExportVars: "📥 Esporta Var",
+            btnImportVars: "📤 Importa Var",
+            noMatchingVars: "Nessuna variabile corrispondente trovata.",
+            varSavedInline: "✓ Salvato!"
         }
     };
 
@@ -899,6 +921,7 @@
             }
 
             .swp-fr-window {
+                position: relative;
                 width: 1140px;
                 max-width: 95vw;
                 height: 740px;
@@ -1335,6 +1358,102 @@
                 flex-direction: column;
                 animation: swp-fr-fade-in 0.15s ease-out;
             }
+
+            /* Variables Drawer Inside Window */
+            .swp-fr-drawer-backdrop {
+                position: absolute;
+                top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(0, 0, 0, 0.35);
+                z-index: 100;
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity 0.2s ease;
+            }
+            .swp-fr-drawer-backdrop.is-open {
+                opacity: 1;
+                pointer-events: auto;
+            }
+            .swp-fr-vars-drawer {
+                position: absolute;
+                top: 0; right: 0; bottom: 0;
+                width: 520px;
+                max-width: 90%;
+                background: var(--swp-fr-bg);
+                border-left: 1px solid var(--swp-fr-border);
+                box-shadow: -8px 0 24px rgba(0, 0, 0, 0.25);
+                z-index: 101;
+                display: flex;
+                flex-direction: column;
+                transform: translateX(100%);
+                transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            }
+            .swp-fr-vars-drawer.is-open {
+                transform: translateX(0);
+            }
+            .swp-fr-drawer-header {
+                padding: 12px 16px;
+                border-bottom: 1px solid var(--swp-fr-border);
+                background: var(--swp-fr-sidebar-bg);
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                flex-shrink: 0;
+            }
+            .swp-fr-drawer-search-bar {
+                padding: 10px 14px;
+                border-bottom: 1px solid var(--swp-fr-border-light);
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                flex-shrink: 0;
+                background: var(--swp-fr-sidebar-bg);
+            }
+            .swp-fr-drawer-list {
+                flex: 1 1 auto;
+                overflow-y: auto;
+                padding: 12px;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .swp-fr-drawer-card {
+                border: 1px solid var(--swp-fr-border-light);
+                border-radius: 6px;
+                background: var(--swp-fr-sidebar-bg);
+                overflow: hidden;
+                transition: border-color 0.15s ease, box-shadow 0.15s ease;
+            }
+            .swp-fr-drawer-card:hover {
+                border-color: var(--swp-fr-primary);
+            }
+            .swp-fr-drawer-card-header {
+                padding: 8px 12px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+                cursor: pointer;
+                user-select: none;
+            }
+            .swp-fr-drawer-card-body {
+                padding: 10px 12px;
+                border-top: 1px solid var(--swp-fr-border-light);
+                background: var(--swp-fr-bg);
+                display: none;
+            }
+            .swp-fr-drawer-card.is-expanded .swp-fr-drawer-card-body {
+                display: block;
+            }
+            .swp-fr-drawer-footer {
+                padding: 10px 14px;
+                border-top: 1px solid var(--swp-fr-border);
+                background: var(--swp-fr-sidebar-bg);
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                flex-shrink: 0;
+                gap: 8px;
+            }
         `;
         document.head.appendChild(style);
     }
@@ -1483,6 +1602,314 @@
         if (modal) modal.remove();
     }
 
+    let varsDrawerExpandedKeys = new Set();
+    let varsDrawerSearchQuery = "";
+
+    function isVarsDrawerOpen() {
+        return !!document.querySelector("#swp-fr-vars-drawer.is-open");
+    }
+
+    function openVarsDrawer() {
+        const modal = document.getElementById(CONFIG.ELEMENT_IDS.MODAL);
+        if (!modal) return;
+        const win = modal.querySelector(".swp-fr-window");
+        if (!win) return;
+
+        let backdrop = win.querySelector("#swp-fr-drawer-backdrop");
+        if (!backdrop) {
+            backdrop = document.createElement("div");
+            backdrop.id = "swp-fr-drawer-backdrop";
+            backdrop.className = "swp-fr-drawer-backdrop";
+            backdrop.addEventListener("click", closeVarsDrawer);
+            win.appendChild(backdrop);
+        }
+
+        let drawer = win.querySelector("#swp-fr-vars-drawer");
+        if (!drawer) {
+            drawer = document.createElement("div");
+            drawer.id = "swp-fr-vars-drawer";
+            drawer.className = "swp-fr-vars-drawer";
+            win.appendChild(drawer);
+        }
+
+        renderVarsDrawerContent(drawer);
+
+        requestAnimationFrame(() => {
+            backdrop.classList.add("is-open");
+            drawer.classList.add("is-open");
+        });
+    }
+
+    function closeVarsDrawer() {
+        const modal = document.getElementById(CONFIG.ELEMENT_IDS.MODAL);
+        if (!modal) return;
+        const backdrop = modal.querySelector("#swp-fr-drawer-backdrop");
+        const drawer = modal.querySelector("#swp-fr-vars-drawer");
+        if (backdrop) backdrop.classList.remove("is-open");
+        if (drawer) {
+            drawer.classList.remove("is-open");
+            setTimeout(() => {
+                drawer.remove();
+                if (backdrop) backdrop.remove();
+            }, 260);
+        }
+    }
+
+    function renderVarsDrawerContent(drawer) {
+        if (!drawer) return;
+        const varEntries = Object.entries(state.variables);
+        const count = varEntries.length;
+
+        const filtered = varEntries.filter(([k, v]) => {
+            if (!varsDrawerSearchQuery) return true;
+            const q = varsDrawerSearchQuery.toLowerCase();
+            return k.toLowerCase().includes(q) || String(v).toLowerCase().includes(q);
+        });
+
+        const cardsHtml = filtered.length === 0
+            ? `<div style="text-align:center;padding:30px;color:var(--swp-fr-text-muted);font-size:12px;">${t("noMatchingVars", "No session variables found.")}</div>`
+            : filtered.map(([k, v]) => {
+                const isExpanded = varsDrawerExpandedKeys.has(k);
+                const strVal = typeof v === "object" ? JSON.stringify(v) : String(v !== undefined && v !== null ? v : "");
+                let isJson = false;
+                let formattedVal = strVal;
+                try {
+                    if (strVal.startsWith("{") || strVal.startsWith("[")) {
+                        formattedVal = JSON.stringify(JSON.parse(strVal), null, 2);
+                        isJson = true;
+                    }
+                } catch {}
+
+                let isJwt = false;
+                let jwtPayloadDecoded = null;
+                if (strVal.split(".").length === 3) {
+                    try {
+                        const parts = strVal.split(".");
+                        const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+                        const jsonStr = decodeURIComponent(atob(base64).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join(""));
+                        jwtPayloadDecoded = JSON.stringify(JSON.parse(jsonStr), null, 2);
+                        isJwt = true;
+                    } catch {}
+                }
+
+                const preview = strVal.length > 28 ? strVal.slice(0, 26) + "..." : strVal;
+
+                return `
+                    <div class="swp-fr-drawer-card ${isExpanded ? "is-expanded" : ""}" data-card-var="${escapeHtml(k)}">
+                        <div class="swp-fr-drawer-card-header" data-action="toggle-expand" data-card-var="${escapeHtml(k)}">
+                            <div style="display:flex;align-items:center;gap:6px;overflow:hidden;flex:1 1 auto;">
+                                <span style="font-size:10px;color:var(--swp-fr-text-muted);">${isExpanded ? "▼" : "▶"}</span>
+                                <strong style="color:var(--swp-fr-primary);font-family:monospace;font-size:12px;">{{${escapeHtml(k)}}}</strong>
+                                ${isJwt ? `<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#8b5cf6;color:#fff;font-weight:700;">JWT</span>` : ""}
+                                ${isJson ? `<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#0284c7;color:#fff;font-weight:700;">JSON</span>` : ""}
+                                <span style="font-size:11px;color:var(--swp-fr-text-muted);font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px;">${escapeHtml(preview)}</span>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:3px;flex-shrink:0;">
+                                <button type="button" class="swp-fr-btn-icon" data-action="detail-var" data-card-var="${escapeHtml(k)}" title="${t("inspectVariable", "Inspect in Large Modal")}">🔍</button>
+                                <button type="button" class="swp-fr-btn-icon" data-action="copy-var" data-card-var="${escapeHtml(k)}" title="${t("copyVariable", "Copy Value")}">📋</button>
+                                <button type="button" class="swp-fr-btn-icon" data-action="delete-var" data-card-var="${escapeHtml(k)}" title="${t("deleteVariable", "Delete Variable")}">✕</button>
+                            </div>
+                        </div>
+                        <div class="swp-fr-drawer-card-body">
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                                <span style="font-size:10px;color:var(--swp-fr-text-muted);text-transform:uppercase;font-weight:700;">${strVal.length} chars</span>
+                                <div style="display:flex;gap:4px;">
+                                    ${isJson ? `<button type="button" class="swp-fr-btn-xs" data-action="format-inline" data-card-var="${escapeHtml(k)}" style="font-size:10px;padding:2px 6px;">Format</button>` : ""}
+                                    <button type="button" class="swp-fr-btn-xs" data-action="save-inline" data-card-var="${escapeHtml(k)}" style="font-size:10px;padding:2px 8px;background:var(--swp-fr-primary);color:#fff;border-color:var(--swp-fr-primary);">${t("btnSaveVar", "Save")}</button>
+                                </div>
+                            </div>
+                            <textarea class="swp-fr-textarea" data-card-input="${escapeHtml(k)}" style="height:110px;font-family:monospace;font-size:11px;white-space:pre;word-break:break-all;">${escapeHtml(formattedVal)}</textarea>
+                            ${jwtPayloadDecoded ? `
+                            <div style="margin-top:6px;">
+                                <span style="font-size:10px;color:var(--swp-fr-text-muted);font-weight:700;display:block;margin-bottom:2px;">Decoded JWT Payload:</span>
+                                <pre style="background:var(--swp-fr-sidebar-bg);padding:6px;border-radius:4px;font-size:10px;max-height:90px;overflow-y:auto;border:1px solid var(--swp-fr-border-light);margin:0;font-family:monospace;">${escapeHtml(jwtPayloadDecoded)}</pre>
+                            </div>
+                            ` : ""}
+                        </div>
+                    </div>
+                `;
+            }).join("");
+
+        drawer.innerHTML = `
+            <div class="swp-fr-drawer-header">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="font-size:16px;">📦</span>
+                    <strong style="font-size:13px;">${t("varsDrawerTitle", "Session Variables")}</strong>
+                    <span class="swp-fr-badge" style="font-size:10px;">${count}</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <button type="button" class="swp-fr-btn-xs" id="swp-fr-drawer-add-btn" style="font-size:11px;padding:3px 8px;background:var(--swp-fr-primary);color:#fff;border-color:var(--swp-fr-primary);">${t("btnAddVariable", "➕ Add")}</button>
+                    <button type="button" class="swp-fr-close-btn" id="swp-fr-drawer-close-btn">✕</button>
+                </div>
+            </div>
+            <div class="swp-fr-drawer-search-bar">
+                <input type="text" class="swp-fr-input" id="swp-fr-drawer-search-input" placeholder="${t("varsSearchPlaceholder", "Filter variables...")}" value="${escapeHtml(varsDrawerSearchQuery)}" style="width:100%;box-sizing:border-box;font-size:11px;height:28px;">
+            </div>
+            <div class="swp-fr-drawer-list" id="swp-fr-drawer-list-container">
+                ${cardsHtml}
+            </div>
+            <div class="swp-fr-drawer-footer">
+                <div style="display:flex;gap:6px;">
+                    <button type="button" class="swp-fr-btn-xs" id="swp-fr-drawer-export">${t("btnExportVars", "📥 Export")}</button>
+                    <button type="button" class="swp-fr-btn-xs" id="swp-fr-drawer-import">${t("btnImportVars", "📤 Import")}</button>
+                </div>
+                ${count > 0 ? `<button type="button" class="swp-fr-btn-xs" id="swp-fr-drawer-clear" style="color:#ef4444;border-color:rgba(239,68,68,0.3);font-size:11px;">${t("btnClearVariables", "Clear All")}</button>` : ""}
+            </div>
+        `;
+
+        bindDrawerEvents(drawer);
+    }
+
+    function bindDrawerEvents(drawer) {
+        drawer.querySelector("#swp-fr-drawer-close-btn")?.addEventListener("click", closeVarsDrawer);
+
+        // Search input
+        const searchInput = drawer.querySelector("#swp-fr-drawer-search-input");
+        searchInput?.addEventListener("input", (e) => {
+            varsDrawerSearchQuery = e.target.value;
+            renderVarsDrawerContent(drawer);
+            const reSearch = drawer.querySelector("#swp-fr-drawer-search-input");
+            if (reSearch) {
+                reSearch.focus();
+                reSearch.setSelectionRange(reSearch.value.length, reSearch.value.length);
+            }
+        });
+
+        // Add variable button
+        drawer.querySelector("#swp-fr-drawer-add-btn")?.addEventListener("click", () => {
+            const rawName = prompt(t("promptAddVarName", "Enter variable name (without {{}}):"));
+            if (!rawName) return;
+            const cleanName = rawName.replace(/[{}]/g, "").trim();
+            if (!cleanName) return;
+            const initialVal = prompt(t("promptAddVarValue", "Enter initial variable value:")) || "";
+            state.variables[cleanName] = initialVal;
+            varsDrawerExpandedKeys.add(cleanName);
+            saveVariables();
+            renderVarsDrawerContent(drawer);
+            renderModalContent();
+        });
+
+        // Export Variables JSON
+        drawer.querySelector("#swp-fr-drawer-export")?.addEventListener("click", () => {
+            const blob = new Blob([JSON.stringify(state.variables, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `session-variables-${new Date().toISOString().slice(0, 10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        // Import Variables JSON
+        drawer.querySelector("#swp-fr-drawer-import")?.addEventListener("click", () => {
+            const input = document.createElement("input");
+            input.type = "file";
+            input.accept = "application/json";
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    try {
+                        const parsed = JSON.parse(ev.target.result);
+                        if (typeof parsed === "object" && parsed !== null) {
+                            Object.assign(state.variables, parsed);
+                            saveVariables();
+                            renderVarsDrawerContent(drawer);
+                            renderModalContent();
+                        }
+                    } catch {
+                        alert(t("importError", "Invalid JSON format."));
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        });
+
+        // Clear All Variables
+        drawer.querySelector("#swp-fr-drawer-clear")?.addEventListener("click", () => {
+            state.variables = {};
+            varsDrawerExpandedKeys.clear();
+            try { sessionStorage.removeItem(CONFIG.STORAGE_KEYS.VARIABLES); } catch {}
+            renderVarsDrawerContent(drawer);
+            renderModalContent();
+        });
+
+        // Card items events
+        drawer.querySelectorAll(".swp-fr-drawer-card").forEach(card => {
+            const varKey = card.getAttribute("data-card-var");
+            if (!varKey) return;
+
+            // Toggle Expand
+            card.querySelector('[data-action="toggle-expand"]')?.addEventListener("click", (e) => {
+                if (e.target.closest("button")) return;
+                if (varsDrawerExpandedKeys.has(varKey)) {
+                    varsDrawerExpandedKeys.delete(varKey);
+                } else {
+                    varsDrawerExpandedKeys.add(varKey);
+                }
+                renderVarsDrawerContent(drawer);
+            });
+
+            // Large Detail Modal Button
+            card.querySelector('[data-action="detail-var"]')?.addEventListener("click", (e) => {
+                e.stopPropagation();
+                openVariableDetailModal(varKey);
+            });
+
+            // Copy Value Button
+            card.querySelector('[data-action="copy-var"]')?.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const btn = card.querySelector('[data-action="copy-var"]');
+                const val = state.variables[varKey] !== undefined ? String(state.variables[varKey]) : "";
+                navigator.clipboard.writeText(val).then(() => {
+                    if (btn) {
+                        const orig = btn.textContent;
+                        btn.textContent = "✓";
+                        setTimeout(() => { btn.textContent = orig; }, 1000);
+                    }
+                });
+            });
+
+            // Delete Variable Button
+            card.querySelector('[data-action="delete-var"]')?.addEventListener("click", (e) => {
+                e.stopPropagation();
+                delete state.variables[varKey];
+                varsDrawerExpandedKeys.delete(varKey);
+                saveVariables();
+                renderVarsDrawerContent(drawer);
+                renderModalContent();
+            });
+
+            // Inline Format Button
+            card.querySelector('[data-action="format-inline"]')?.addEventListener("click", () => {
+                const ta = card.querySelector(`[data-card-input="${varKey}"]`);
+                if (ta && ta.value) {
+                    try {
+                        ta.value = JSON.stringify(JSON.parse(ta.value), null, 2);
+                    } catch {}
+                }
+            });
+
+            // Inline Save Button
+            card.querySelector('[data-action="save-inline"]')?.addEventListener("click", () => {
+                const ta = card.querySelector(`[data-card-input="${varKey}"]`);
+                const saveBtn = card.querySelector('[data-action="save-inline"]');
+                if (ta) {
+                    state.variables[varKey] = ta.value;
+                    saveVariables();
+                    renderModalContent();
+                    if (saveBtn) {
+                        const orig = saveBtn.textContent;
+                        saveBtn.textContent = t("varSavedInline", "✓ Saved!");
+                        setTimeout(() => { saveBtn.textContent = orig; }, 1200);
+                    }
+                }
+            });
+        });
+    }
+
     /**
      * Opens the 2-Column Flow Studio modal dialog.
      */
@@ -1500,6 +1927,14 @@
 
         const escHandler = (e) => {
             if (e.key === "Escape") {
+                if (document.getElementById("swp-fr-var-modal")) {
+                    closeVariableDetailModal();
+                    return;
+                }
+                if (isVarsDrawerOpen()) {
+                    closeVarsDrawer();
+                    return;
+                }
                 closeFlowStudio();
                 window.removeEventListener("keydown", escHandler);
             }
@@ -1520,6 +1955,7 @@
 
     function closeFlowStudio() {
         closeVariableDetailModal();
+        closeVarsDrawer();
         const existing = document.getElementById(CONFIG.ELEMENT_IDS.MODAL);
         if (existing) existing.remove();
         if (window.SwaggerActivityBar?.setItemActive) {
@@ -1658,7 +2094,10 @@
                 <div style="padding:10px 12px;border-top:1px solid var(--swp-fr-border-light);background:var(--swp-fr-sidebar-bg);">
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
                         <span style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--swp-fr-text-muted);">${t("variablesTitle", "Variables")} (${Object.keys(state.variables).length})</span>
-                        ${Object.keys(state.variables).length > 0 ? `<button type="button" class="swp-fr-btn-xs" id="swp-fr-btn-clear-vars" style="font-size:10px;padding:2px 6px;">${t("btnClearVariables", "Clear")}</button>` : ""}
+                        <div style="display:flex;align-items:center;gap:4px;">
+                            <button type="button" class="swp-fr-btn-xs" id="swp-fr-btn-open-vars-drawer" style="font-size:10px;padding:2px 6px;" title="${t("openVarsDrawerTooltip", "Open Variables Drawer (browse, filter and inspect)")}">⛶ ${t("btnOpenVarsDrawer", "Manage")}</button>
+                            ${Object.keys(state.variables).length > 0 ? `<button type="button" class="swp-fr-btn-xs" id="swp-fr-btn-clear-vars" style="font-size:10px;padding:2px 6px;">${t("btnClearVariables", "Clear")}</button>` : ""}
+                        </div>
                     </div>
                     <div class="swp-fr-vars-box">
                         ${varRows || `<span style="color:var(--swp-fr-text-muted);padding:8px;text-align:center;display:block;">${t("noVariablesNotice", "No variables stored yet.")}</span>`}
@@ -2005,7 +2444,8 @@
             });
         });
 
-        // Variables Box Actions (Inspect, Copy, Delete single, Clear all)
+        // Variables Box Actions (Inspect, Copy, Delete single, Clear all, Open Drawer)
+        win.querySelector("#swp-fr-btn-open-vars-drawer")?.addEventListener("click", openVarsDrawer);
         win.querySelector("#swp-fr-btn-clear-vars")?.addEventListener("click", () => {
             state.variables = {};
             try { sessionStorage.removeItem(CONFIG.STORAGE_KEYS.VARIABLES); } catch {}
@@ -2430,6 +2870,8 @@ Il **Flow Runner Studio** permette di testare flussi di chiamate concatenate dir
         run: runActiveScenario,
         openVariableDetail: openVariableDetailModal,
         closeVariableDetail: closeVariableDetailModal,
+        openVarsDrawer,
+        closeVarsDrawer,
         getActiveBearerToken,
         getAuthorizedSecuritySchemes,
         getTokenForScheme,

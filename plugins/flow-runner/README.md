@@ -21,8 +21,9 @@ A multi-step API workflow execution studio embedded directly inside Swagger UI. 
 - **Session Variables in `sessionStorage`**:
   - Live variables extracted during flow runs are stored strictly in `sessionStorage` for tab isolation, preventing cross-tab pollution and ensuring auto-cleanup when the browser tab closes.
   - Custom scenarios and runner settings remain safely persisted in `localStorage`.
-- **Live Variable Inspector & Detail Modal**:
+- **Live Variable Inspector & Dedicated Variables Drawer**:
   - Compact sidebar panel capped at ~5-7 rows with smooth vertical scroll.
+  - Click `⛶ Manage` to slide open the **Variables Drawer** directly inside the Studio window: real-time search filter, expandable accordion cards, formatted JSON inspection, live decoded JWT payloads, inline editing, manual variable creation (`+ Add Variable`), and JSON export/import.
   - Click any variable row or the 🔍 icon to open an interactive modal with full formatted view (JSON auto-indentation, JWT decoding with expiry inspection, raw view), 1-click clipboard copy, and live in-place value editing without re-running the workflow.
 - **Interactive 2-Column Flow Studio**:
   - Left column: Scenario switcher, step sequence reordering, step status badges (`WAITING`, `RUNNING`, `SUCCESS`, `FAILED`, `SKIPPED`), execution metrics, and Live Variable Inspector.
@@ -203,6 +204,10 @@ await window.SwaggerFlowRunner.run();
 
 // Open variable inspection & editing modal
 window.SwaggerFlowRunner.openVariableDetail("candidateId");
+
+// Open & close internal Variables Drawer
+window.SwaggerFlowRunner.openVarsDrawer();
+window.SwaggerFlowRunner.closeVarsDrawer();
 
 // Interpolate variables into arbitrary strings
 const resolved = window.SwaggerFlowRunner.interpolateVariables(
