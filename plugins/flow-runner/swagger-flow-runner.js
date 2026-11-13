@@ -937,9 +937,11 @@
             }
 
             /* Theme Variables */
-            .swp-fr-overlay {
+            .swp-fr-overlay,
+            .swp-fr-submodal-overlay {
                 --swp-fr-bg: #ffffff;
                 --swp-fr-sidebar-bg: #f8fafc;
+                --swp-fr-header-bg: #f1f5f9;
                 --swp-fr-border: #cbd5e1;
                 --swp-fr-border-light: #e2e8f0;
                 --swp-fr-text: #0f172a;
@@ -952,9 +954,16 @@
                 --swp-fr-code-text: #f8fafc;
             }
             html.dark-mode .swp-fr-overlay,
-            body.dark-mode .swp-fr-overlay {
+            body.dark-mode .swp-fr-overlay,
+            html.dark-mode .swp-fr-submodal-overlay,
+            body.dark-mode .swp-fr-submodal-overlay,
+            .dark-mode .swp-fr-overlay,
+            .dark-mode .swp-fr-submodal-overlay,
+            [data-theme="dark"] .swp-fr-overlay,
+            [data-theme="dark"] .swp-fr-submodal-overlay {
                 --swp-fr-bg: #181818;
                 --swp-fr-sidebar-bg: #202020;
+                --swp-fr-header-bg: #262626;
                 --swp-fr-border: #383838;
                 --swp-fr-border-light: #2d2d2d;
                 --swp-fr-text: #f5f5f5;
@@ -1338,25 +1347,33 @@
                 left: 0;
                 right: 0;
                 bottom: 0;
-                background: rgba(0, 0, 0, 0.65);
+                background: rgba(0, 0, 0, 0.75);
                 z-index: 10000001;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                backdrop-filter: blur(2px);
+                backdrop-filter: blur(4px);
             }
             .swp-fr-submodal-window {
-                width: 620px;
-                max-width: 90vw;
-                background: var(--swp-fr-bg);
-                color: var(--swp-fr-text);
-                border: 1px solid var(--swp-fr-border);
+                width: 640px;
+                max-width: 92vw;
+                background-color: var(--swp-fr-bg, #ffffff) !important;
+                color: var(--swp-fr-text, #0f172a) !important;
+                border: 1px solid var(--swp-fr-border, #cbd5e1) !important;
                 border-radius: 8px;
-                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+                box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
                 overflow: hidden;
                 display: flex;
                 flex-direction: column;
-                animation: swp-fr-fade-in 0.15s ease-out;
+                animation: swpFrFadeIn 0.15s ease-out;
+            }
+            html.dark-mode .swp-fr-submodal-window,
+            body.dark-mode .swp-fr-submodal-window,
+            .dark-mode .swp-fr-submodal-window,
+            [data-theme="dark"] .swp-fr-submodal-window {
+                background-color: var(--swp-fr-bg, #181818) !important;
+                color: var(--swp-fr-text, #f5f5f5) !important;
+                border-color: var(--swp-fr-border, #383838) !important;
             }
 
             /* Variables Drawer Inside Window */
@@ -1489,7 +1506,7 @@
 
         const overlay = document.createElement("div");
         overlay.id = "swp-fr-var-modal";
-        overlay.className = "swp-fr-submodal-overlay";
+        overlay.className = "swp-fr-overlay swp-fr-submodal-overlay";
 
         overlay.addEventListener("click", (e) => {
             if (e.target === overlay) closeVariableDetailModal();
@@ -1505,7 +1522,7 @@
 
         overlay.innerHTML = `
             <div class="swp-fr-submodal-window">
-                <div style="padding:12px 16px;border-bottom:1px solid var(--swp-fr-border);display:flex;align-items:center;justify-content:space-between;background:var(--swp-fr-header-bg);">
+                <div style="padding:12px 16px;border-bottom:1px solid var(--swp-fr-border);display:flex;align-items:center;justify-content:space-between;background:var(--swp-fr-sidebar-bg);">
                     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                         <span style="font-size:16px;">🔍</span>
                         <strong style="font-size:14px;font-family:monospace;color:var(--swp-fr-primary);">{{${escapeHtml(varKey)}}}</strong>
@@ -1515,7 +1532,7 @@
                     </div>
                     <button type="button" class="swp-fr-close-btn" id="swp-fr-btn-var-close">✕</button>
                 </div>
-                <div style="padding:16px;display:flex;flex-direction:column;gap:12px;max-height:75vh;overflow-y:auto;">
+                <div style="padding:16px;display:flex;flex-direction:column;gap:12px;max-height:75vh;overflow-y:auto;background:var(--swp-fr-bg);">
                     <div>
                         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
                             <label style="font-size:12px;font-weight:700;">${t("varEditTitle", "Variable Value (Editable):")}</label>
@@ -1524,12 +1541,12 @@
                                 <button type="button" class="swp-fr-btn-xs" id="swp-fr-btn-var-copy">${t("copyVariable", "📋 Copy")}</button>
                             </div>
                         </div>
-                        <textarea class="swp-fr-textarea" id="swp-fr-var-val-input" style="height:200px;font-family:monospace;font-size:12px;white-space:pre;word-break:break-all;">${escapeHtml(formattedVal)}</textarea>
+                        <textarea class="swp-fr-textarea" id="swp-fr-var-val-input" style="height:200px;font-family:monospace;font-size:12px;white-space:pre;word-break:break-all;background:var(--swp-fr-input-bg);color:var(--swp-fr-text);border:1px solid var(--swp-fr-border);">${escapeHtml(formattedVal)}</textarea>
                     </div>
                     ${jwtPayloadDecoded ? `
                     <div>
                         <label style="font-size:11px;font-weight:700;color:var(--swp-fr-text-muted);text-transform:uppercase;margin-bottom:4px;display:block;">JWT Payload (Decoded):</label>
-                        <pre style="background:var(--swp-fr-sidebar-bg);padding:10px;border-radius:6px;font-size:11px;max-height:160px;overflow-y:auto;border:1px solid var(--swp-fr-border-light);margin:0;font-family:monospace;">${escapeHtml(jwtPayloadDecoded)}</pre>
+                        <pre style="background:var(--swp-fr-sidebar-bg);padding:10px;border-radius:6px;font-size:11px;max-height:160px;overflow-y:auto;border:1px solid var(--swp-fr-border-light);margin:0;font-family:monospace;color:var(--swp-fr-text);">${escapeHtml(jwtPayloadDecoded)}</pre>
                     </div>
                     ` : ""}
                 </div>
