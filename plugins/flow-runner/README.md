@@ -122,12 +122,21 @@ You can configure host predefined scenarios and default execution settings by de
 | Option | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `scenarios` | `Scenario[]` | `[]` | List of host-provided scenarios loaded on startup |
-| `appSchemeName` | `string` | `"Bearer"` | Name of the Swagger application security scheme (e.g. Febe) prioritized over IDP/MSAL tokens |
+| `appSchemeName` | `string` | `"Bearer"` | Name of the application security scheme (e.g. Bearer / JWT) prioritized over IDP/OAuth tokens |
 | `msalSchemeName` | `string` | `"MsalAuth"` | Name of the identity provider / MSAL scheme to identify and avoid prioritizing for API requests |
 | `preferredScheme` | `string` | `null` | Explicit scheme name to always prefer if multiple security schemes are authorized |
 | `activityBarOrder` | `number` | `35` | Order in the Activity Bar vertical dock |
 | `defaultDelayMs` | `number` | `300` | Default pause between sequential steps |
 | `stopOnError` | `boolean` | `true` | Whether to abort remaining steps if a step returns status >= 400 |
+
+---
+
+## Multi-Scheme Authentication & Step Overrides
+
+In architectures with multiple security schemes authorized simultaneously (such as an IDP/OAuth2 scheme like `MsalAuth` alongside an application `Bearer` token):
+
+- **Scenario-Level Default**: Configure `Default Auth` at the scenario level (`Auto`, specific active scheme like `Bearer`, `None`, or custom scheme/variable).
+- **Step-Level Override**: Each step can inherit the scenario default (`Inherit from Scenario`), select an active scheme dynamically detected from Swagger UI, switch to `Auto`, disable authentication (`No Auth`), or supply a `Custom Scheme / Variable` (e.g. `{{customToken}}`).
 
 ---
 
@@ -139,6 +148,8 @@ interface Scenario {
   name: string;
   description?: string;
   isHostPredefined?: boolean;
+  authScheme?: "auto" | "none" | "custom" | string;
+  customAuthScheme?: string;
   steps: Step[];
 }
 
@@ -146,6 +157,18 @@ interface Step {
   id: string;
   name: string;
   method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD";
+  path: string; // e.g. "/api/v1/orders/{{orderId}}"
+  headers?: Array<{ key: string; value: string }>;
+  body?: string; // Raw JSON or text payload with {{varName}} placeholders
+  useAuth?: boolean; // Send Authorization header (default: true)
+  authScheme?: "inherit" | "auto" | "none" | "custom" | string; // Inherit or override scenario auth
+  customAuthScheme?: string; // Scheme name or {{var}} when authScheme is "custom"
+  extractions?: Array<{
+    jsonPath: string; // Property path, e.g. "id", "data.user.guid", "items[0].id"
+    varName: string;  // Target variable name, e.g. "orderId"
+  }>;
+}
+```
   path: string; // e.g. "/api/v1/orders/{{orderId}}"
   headers?: Array<{ key: string; value: string }>;
   body?: string; // Raw JSON or text payload with {{varName}} placeholders

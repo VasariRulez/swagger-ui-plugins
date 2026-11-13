@@ -49,10 +49,10 @@
         /** Predefined scenarios supplied by host */
         HOST_SCENARIOS: Array.isArray(userConfig.scenarios) ? userConfig.scenarios : [],
 
-        /** Security scheme identifier for application Bearer tokens (e.g. Febe) */
+        /** Security scheme identifier for application Bearer tokens */
         APP_BEARER_SCHEME: userConfig.appSchemeName || window.SwaggerAuthConfig?.appSchemeName || window.SwaggerJwtConfig?.appSchemeName || "Bearer",
 
-        /** Security scheme identifier for IDP / MSAL tokens */
+        /** Security scheme identifier for IDP / OAuth2 tokens */
         MSAL_SCHEME: userConfig.msalSchemeName || window.SwaggerAuthConfig?.msalSchemeName || window.SwaggerJwtConfig?.msalSchemeName || "MsalAuth",
 
         /** Explicitly preferred security scheme name */
@@ -97,7 +97,14 @@
             stepNameLabel: "Step Name:",
             methodLabel: "Method:",
             pathLabel: "Endpoint Path (supports {{var}}):",
-            authCheckbox: "Send active Swagger UI Bearer Token",
+            authCheckbox: "Send Authorization Header",
+            authSchemeLabel: "Security Scheme:",
+            authInherit: "Inherit from Scenario ({scheme})",
+            authAuto: "Auto (Prioritize Application Bearer)",
+            authNone: "No Auth (Anonymous)",
+            authCustom: "Custom Scheme / Variable...",
+            authCustomPlaceholder: "Enter scheme name (e.g. ApiKey) or {{tokenVar}}",
+            scenarioAuthLabel: "Default Auth:",
             pathParamsTitle: "Path Parameters",
             queryParamsTitle: "Query Parameters",
             headersTitle: "Custom Headers",
@@ -165,7 +172,14 @@
             stepNameLabel: "Nome Step:",
             methodLabel: "Metodo:",
             pathLabel: "Percorso Endpoint (supporta {{var}}):",
-            authCheckbox: "Invia Bearer Token attivo di Swagger UI",
+            authCheckbox: "Invia Intestazione Authorization",
+            authSchemeLabel: "Schema di Sicurezza:",
+            authInherit: "Eredita dallo Scenario ({scheme})",
+            authAuto: "Automatico (Priorità Bearer Applicativo)",
+            authNone: "Nessuna Auth (Anonimo)",
+            authCustom: "Schema Personalizzato / Variabile...",
+            authCustomPlaceholder: "Inserisci nome schema (es. ApiKey) o {{tokenVar}}",
+            scenarioAuthLabel: "Auth Predefinita:",
             pathParamsTitle: "Parametri di Percorso (Path)",
             queryParamsTitle: "Parametri Query",
             headersTitle: "Intestazioni Personalizzate",
@@ -309,6 +323,8 @@
             method: (step.method || "GET").toUpperCase(),
             path: step.path || "/",
             useAuth: step.useAuth !== false && step.inheritAuth !== false,
+            authScheme: step.authScheme || "inherit",
+            customAuthScheme: step.customAuthScheme || "",
             queryParams: Array.isArray(step.queryParams) ? [...step.queryParams.map(p => ({ ...p }))] : [],
             headers: Array.isArray(step.headers) ? [...step.headers.map(h => ({ ...h }))] : [],
             body: step.body !== undefined ? step.body : "",
@@ -464,7 +480,7 @@
 
     /**
      * Retrieves active Bearer token from Swagger UI Redux store in memory.
-     * Prioritizes application token (e.g. Febe / Bearer) over identity provider token (MSAL).
+     * Prioritizes application token (e.g. Bearer) over identity provider token (OAuth2 / MSAL).
      * @returns {string|null}
      */
     function getActiveBearerToken() {
@@ -483,7 +499,7 @@
                 if (prefToken) return prefToken;
             }
 
-            // 2. Prioritize configured Application Bearer scheme (Febe token)
+            // 2. Prioritize configured Application Bearer scheme
             const appBearerCandidates = [
                 CONFIG.APP_BEARER_SCHEME,
                 "Bearer",
@@ -515,6 +531,104 @@
             console.warn("[Swagger Flow Runner] Error reading Bearer token:", e);
         }
         return null;
+    }
+
+    /**
+     * Lists all authorized security scheme names currently present in Swagger UI Redux store.
+     * @returns {string[]}
+     */
+    function getAuthorizedSecuritySchemes() {
+        const schemes = [];
+        try {
+            const ui = window.ui;
+            if (!ui || typeof ui.getState !== "function") return schemes;
+            const authState = ui.getState().get("auth");
+            if (!authState) return schemes;
+            const authorized = authState.get("authorized");
+            if (!authorized || typeof authorized.keys !== "function") return schemes;
+            for (const key of authorized.keys()) {
+                if (key && !schemes.includes(key)) {
+                    schemes.push(key);
+                }
+            }
+        } catch (e) {
+            console.warn("[Swagger Flow Runner] Error listing authorized schemes:", e);
+        }
+        return schemes;
+    }
+
+    /**
+     * Extracts token value string for a specific authorized scheme by name.
+     * @param {string} schemeName
+     * @returns {string|null}
+     */
+    function getTokenForScheme(schemeName) {
+        if (!schemeName) return null;
+        try {
+            const ui = window.ui;
+            if (!ui || typeof ui.getState !== "function") return null;
+            const authorized = ui.getState().get("auth")?.get("authorized");
+            if (!authorized || typeof authorized.get !== "function") return null;
+            const entry = authorized.get(schemeName);
+            return extractTokenFromSchemeData(entry);
+        } catch (e) {
+            console.warn("[Swagger Flow Runner] Error getting token for scheme:", schemeName, e);
+        }
+        return null;
+    }
+
+    /**
+     * Resolves the effective token for a step, honoring:
+     * Step authScheme -> Scenario default authScheme -> Auto Priority
+     * @param {object} step
+     * @param {object} scenario
+     * @returns {string|null}
+     */
+    function resolveTokenForStep(step, scenario) {
+        if (!step || step.useAuth === false) return null;
+
+        // 1. Determine target scheme
+        let targetScheme = step.authScheme || "inherit";
+        if (targetScheme === "inherit") {
+            targetScheme = scenario?.authScheme || "auto";
+        }
+
+        // 2. If target is none / anonymous
+        if (targetScheme === "none") return null;
+
+        // 3. If target is custom or a variable
+        if (targetScheme === "custom") {
+            let customVal = step.customAuthScheme || "";
+            if (!customVal && step.authScheme && step.authScheme !== "custom") {
+                customVal = step.authScheme;
+            }
+            if (customVal) {
+                // If variable syntax {{token}}, interpolate
+                if (customVal.includes("{{")) {
+                    const interpolated = interpolateVariables(customVal);
+                    if (interpolated && interpolated !== customVal) {
+                        return interpolated.replace(/^Bearer\s+/i, "").trim();
+                    }
+                }
+                // Try looking up as Swagger scheme name
+                const directToken = getTokenForScheme(customVal);
+                if (directToken) return directToken;
+                // Otherwise return custom string as raw token
+                return customVal.replace(/^Bearer\s+/i, "").trim();
+            }
+        }
+
+        // 4. If target is auto, run standard prioritized resolver
+        if (targetScheme === "auto" || !targetScheme) {
+            return getActiveBearerToken();
+        }
+
+        // 5. Specific Swagger scheme name (e.g. "Bearer", "MsalAuth", etc.)
+        const token = getTokenForScheme(targetScheme);
+        if (token) return token;
+
+        // Fallback to auto if specific scheme was not currently authorized
+        return getActiveBearerToken();
     }
 
     /**
@@ -603,7 +717,8 @@
             // 3. Build Headers
             const headers = new Headers();
             if (step.useAuth !== false) {
-                const token = getActiveBearerToken();
+                const scenario = getActiveScenario();
+                const token = resolveTokenForStep(step, scenario);
                 if (token) {
                     headers.set("Authorization", token.startsWith("Bearer ") ? token : `Bearer ${token}`);
                 }
@@ -1182,6 +1297,13 @@
         const activeStep = steps[state.selectedStepIndex] || null;
         const activeResult = state.stepResults[state.selectedStepIndex] || null;
 
+        const authorizedSchemes = getAuthorizedSecuritySchemes();
+        const scenarioDefaultLabel = scenario?.authScheme && scenario.authScheme !== "auto"
+            ? (scenario.authScheme === "none" ? t("authNone", "None") : (scenario.authScheme === "custom" ? (scenario.customAuthScheme || "Custom") : scenario.authScheme))
+            : "Auto";
+        const isScenarioCustomAuth = scenario?.authScheme === "custom";
+        const isStepCustomAuth = activeStep && (activeStep.authScheme === "custom" || (activeStep.authScheme && !["inherit", "auto"].includes(activeStep.authScheme) && !authorizedSchemes.includes(activeStep.authScheme)));
+
         // Render Header
         let headerHtml = `
             <div class="swp-fr-header">
@@ -1242,6 +1364,21 @@
                         <button type="button" class="swp-fr-btn-xs" id="swp-fr-btn-import">${t("btnImport", "📤 Import")}</button>
                     </div>
                 </div>
+
+                <div style="padding:6px 12px;border-bottom:1px solid var(--swp-fr-border-light);display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:11px;background:var(--swp-fr-sidebar-bg);">
+                    <span style="color:var(--swp-fr-text-muted);font-weight:600;white-space:nowrap;">${t("scenarioAuthLabel", "Default Auth:")}</span>
+                    <select class="swp-fr-select" id="swp-fr-scenario-auth-select" style="font-size:11px;padding:2px 6px;height:24px;flex:1;max-width:170px;">
+                        <option value="auto" ${(!scenario?.authScheme || scenario.authScheme === "auto") ? "selected" : ""}>${t("authAuto", "Auto (Prioritize Bearer)")}</option>
+                        ${authorizedSchemes.map(s => `<option value="${s}" ${scenario?.authScheme === s ? "selected" : ""}>${s} (Active)</option>`).join("")}
+                        <option value="none" ${scenario?.authScheme === "none" ? "selected" : ""}>${t("authNone", "No Auth (Anonymous)")}</option>
+                        <option value="custom" ${isScenarioCustomAuth ? "selected" : ""}>${t("authCustom", "Custom Scheme...")}</option>
+                    </select>
+                </div>
+                ${isScenarioCustomAuth ? `
+                <div style="padding:4px 12px 6px;border-bottom:1px solid var(--swp-fr-border-light);background:var(--swp-fr-sidebar-bg);">
+                    <input type="text" class="swp-fr-input" id="swp-fr-scenario-auth-custom" placeholder="${t("authCustomPlaceholder", "Enter scheme name or {{var}}")}" value="${escapeHtml(scenario.customAuthScheme || "")}" style="font-size:11px;width:100%;box-sizing:border-box;">
+                </div>
+                ` : ""}
 
                 <div style="padding:8px 12px;border-bottom:1px solid var(--swp-fr-border-light);display:flex;align-items:center;justify-content:space-between;">
                     <span style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--swp-fr-text-muted);">${t("stepsTitle", "Scenario Steps")} (${steps.length})</span>
@@ -1325,11 +1462,29 @@
                         </div>
                     </div>
 
-                    <div style="margin-top:2px;">
-                        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
-                            <input type="checkbox" id="swp-fr-input-auth" ${activeStep.useAuth !== false ? "checked" : ""}>
-                            <span>${t("authCheckbox", "Send active Swagger UI Bearer Token")}</span>
-                        </label>
+                    <div style="margin: 8px 0; padding: 8px 10px; background: var(--swp-fr-sidebar-bg); border: 1px solid var(--swp-fr-border-light); border-radius: 4px; display: flex; flex-direction: column; gap: 6px;">
+                        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+                            <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;font-weight:600;">
+                                <input type="checkbox" id="swp-fr-input-auth" ${activeStep.useAuth !== false ? "checked" : ""}>
+                                <span>${t("authCheckbox", "Send Authorization Header")}</span>
+                            </label>
+                            ${activeStep.useAuth !== false ? `
+                            <div style="display:flex;align-items:center;gap:6px;font-size:11px;">
+                                <span style="color:var(--swp-fr-text-muted);">${t("authSchemeLabel", "Security Scheme:")}</span>
+                                <select class="swp-fr-select" id="swp-fr-input-auth-scheme" style="font-size:11px;padding:2px 6px;height:24px;min-width:140px;">
+                                    <option value="inherit" ${(!activeStep.authScheme || activeStep.authScheme === "inherit") ? "selected" : ""}>${t("authInherit", "Inherit from Scenario ({scheme})", { scheme: scenarioDefaultLabel })}</option>
+                                    <option value="auto" ${activeStep.authScheme === "auto" ? "selected" : ""}>${t("authAuto", "Auto (Prioritize Bearer)")}</option>
+                                    ${authorizedSchemes.map(s => `<option value="${s}" ${activeStep.authScheme === s ? "selected" : ""}>${s} (Active)</option>`).join("")}
+                                    <option value="custom" ${isStepCustomAuth ? "selected" : ""}>${t("authCustom", "Custom Scheme / Variable...")}</option>
+                                </select>
+                            </div>
+                            ` : ""}
+                        </div>
+                        ${(activeStep.useAuth !== false && isStepCustomAuth) ? `
+                        <div style="display:flex;gap:6px;align-items:center;margin-top:2px;">
+                            <input type="text" class="swp-fr-input" id="swp-fr-input-auth-custom" placeholder="${t("authCustomPlaceholder", "Enter scheme name or {{tokenVar}}")}" value="${escapeHtml(activeStep.customAuthScheme || (activeStep.authScheme !== "custom" && !["inherit","auto"].includes(activeStep.authScheme) && !authorizedSchemes.includes(activeStep.authScheme) ? activeStep.authScheme : ""))}" style="font-size:11px;width:100%;box-sizing:border-box;">
+                        </div>
+                        ` : ""}
                     </div>
 
                     <div class="swp-fr-field-group">
@@ -1442,6 +1597,23 @@
             state.stepResults = {};
             saveCustomScenarios();
             renderModalContent();
+        });
+
+        // Scenario Default Auth Selector
+        win.querySelector("#swp-fr-scenario-auth-select")?.addEventListener("change", (e) => {
+            const curScen = getActiveScenario();
+            if (curScen) {
+                curScen.authScheme = e.target.value;
+                saveCustomScenarios();
+                renderModalContent();
+            }
+        });
+        win.querySelector("#swp-fr-scenario-auth-custom")?.addEventListener("input", (e) => {
+            const curScen = getActiveScenario();
+            if (curScen) {
+                curScen.customAuthScheme = e.target.value;
+                saveCustomScenarios();
+            }
         });
 
         // Scenario Buttons
@@ -1621,6 +1793,16 @@
             });
             win.querySelector("#swp-fr-input-auth")?.addEventListener("change", (e) => {
                 activeStep.useAuth = e.target.checked;
+                saveCustomScenarios();
+                renderModalContent();
+            });
+            win.querySelector("#swp-fr-input-auth-scheme")?.addEventListener("change", (e) => {
+                activeStep.authScheme = e.target.value;
+                saveCustomScenarios();
+                renderModalContent();
+            });
+            win.querySelector("#swp-fr-input-auth-custom")?.addEventListener("input", (e) => {
+                activeStep.customAuthScheme = e.target.value;
                 saveCustomScenarios();
             });
             win.querySelector("#swp-fr-input-body")?.addEventListener("input", (e) => {
@@ -1948,6 +2130,9 @@ Il **Flow Runner Studio** permette di testare flussi di chiamate concatenate dir
         toggle: toggleFlowStudio,
         run: runActiveScenario,
         getActiveBearerToken,
+        getAuthorizedSecuritySchemes,
+        getTokenForScheme,
+        resolveTokenForStep,
         interpolateVariables,
         extractValueByPath,
         getState: () => state
