@@ -122,6 +122,9 @@ You can configure host predefined scenarios and default execution settings by de
 | Option | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `scenarios` | `Scenario[]` | `[]` | List of host-provided scenarios loaded on startup |
+| `appSchemeName` | `string` | `"Bearer"` | Name of the Swagger application security scheme (e.g. Febe) prioritized over IDP/MSAL tokens |
+| `msalSchemeName` | `string` | `"MsalAuth"` | Name of the identity provider / MSAL scheme to identify and avoid prioritizing for API requests |
+| `preferredScheme` | `string` | `null` | Explicit scheme name to always prefer if multiple security schemes are authorized |
 | `activityBarOrder` | `number` | `35` | Order in the Activity Bar vertical dock |
 | `defaultDelayMs` | `number` | `300` | Default pause between sequential steps |
 | `stopOnError` | `boolean` | `true` | Whether to abort remaining steps if a step returns status >= 400 |

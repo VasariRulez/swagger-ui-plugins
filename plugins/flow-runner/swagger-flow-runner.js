@@ -47,7 +47,16 @@
         },
 
         /** Predefined scenarios supplied by host */
-        HOST_SCENARIOS: Array.isArray(userConfig.scenarios) ? userConfig.scenarios : []
+        HOST_SCENARIOS: Array.isArray(userConfig.scenarios) ? userConfig.scenarios : [],
+
+        /** Security scheme identifier for application Bearer tokens (e.g. Febe) */
+        APP_BEARER_SCHEME: userConfig.appSchemeName || window.SwaggerAuthConfig?.appSchemeName || window.SwaggerJwtConfig?.appSchemeName || "Bearer",
+
+        /** Security scheme identifier for IDP / MSAL tokens */
+        MSAL_SCHEME: userConfig.msalSchemeName || window.SwaggerAuthConfig?.msalSchemeName || window.SwaggerJwtConfig?.msalSchemeName || "MsalAuth",
+
+        /** Explicitly preferred security scheme name */
+        PREFERRED_SCHEME: userConfig.preferredScheme || null
     };
 
     // =========================================================================
@@ -428,7 +437,34 @@
     // =========================================================================
 
     /**
+     * Extracts token value string from a Swagger authorized scheme entry.
+     * @param {object} schemeData
+     * @returns {string|null}
+     */
+    function extractTokenFromSchemeData(schemeData) {
+        if (!schemeData) return null;
+        // Direct Bearer token value
+        const tokenVal = typeof schemeData.get === "function" ? schemeData.get("value") : schemeData.value;
+        if (tokenVal && typeof tokenVal === "string" && tokenVal.trim()) {
+            return tokenVal.replace(/^Bearer\s+/i, "").trim();
+        }
+
+        // Nested token object (OAuth2 / MSAL / PKCE)
+        const nestedToken = typeof schemeData.get === "function" ? schemeData.get("token") : schemeData.token;
+        if (nestedToken) {
+            const access = typeof nestedToken.get === "function"
+                ? (nestedToken.get("access_token") || nestedToken.get("token"))
+                : (nestedToken.access_token || nestedToken.token);
+            if (access && typeof access === "string" && access.trim()) {
+                return access.replace(/^Bearer\s+/i, "").trim();
+            }
+        }
+        return null;
+    }
+
+    /**
      * Retrieves active Bearer token from Swagger UI Redux store in memory.
+     * Prioritizes application token (e.g. Febe / Bearer) over identity provider token (MSAL).
      * @returns {string|null}
      */
     function getActiveBearerToken() {
@@ -440,18 +476,40 @@
             const authorized = authState.get("authorized");
             if (!authorized || typeof authorized.get !== "function") return null;
 
-            for (const [schemeKey, schemeData] of authorized.entries()) {
-                if (!schemeData) continue;
-                // Direct Bearer token value
-                const tokenVal = typeof schemeData.get === "function" ? schemeData.get("value") : schemeData.value;
-                if (tokenVal && typeof tokenVal === "string") return tokenVal;
+            // 1. If explicit scheme configured, check it first
+            if (CONFIG.PREFERRED_SCHEME) {
+                const preferredEntry = authorized.get(CONFIG.PREFERRED_SCHEME);
+                const prefToken = extractTokenFromSchemeData(preferredEntry);
+                if (prefToken) return prefToken;
+            }
 
-                // Nested token object (OAuth2 / MSAL)
-                const nestedToken = typeof schemeData.get === "function" ? schemeData.get("token") : schemeData.token;
-                if (nestedToken) {
-                    const access = typeof nestedToken.get === "function" ? nestedToken.get("access_token") : nestedToken.access_token;
-                    if (access && typeof access === "string") return access;
-                }
+            // 2. Prioritize configured Application Bearer scheme (Febe token)
+            const appBearerCandidates = [
+                CONFIG.APP_BEARER_SCHEME,
+                "Bearer",
+                "BearerAuth",
+                "appBearer",
+                "AppBearer"
+            ];
+            for (const schemeName of appBearerCandidates) {
+                if (!schemeName) continue;
+                const entry = authorized.get(schemeName);
+                const token = extractTokenFromSchemeData(entry);
+                if (token) return token;
+            }
+
+            // 3. Fallback: inspect any authorized schemes excluding MSAL
+            for (const [schemeKey, schemeData] of authorized.entries()) {
+                if (!schemeData || schemeKey === CONFIG.MSAL_SCHEME) continue;
+                const token = extractTokenFromSchemeData(schemeData);
+                if (token) return token;
+            }
+
+            // 4. Last resort: if only MSAL scheme is present, use it
+            const msalEntry = authorized.get(CONFIG.MSAL_SCHEME);
+            if (msalEntry) {
+                const msalToken = extractTokenFromSchemeData(msalEntry);
+                if (msalToken) return msalToken;
             }
         } catch (e) {
             console.warn("[Swagger Flow Runner] Error reading Bearer token:", e);
@@ -1889,6 +1947,7 @@ Il **Flow Runner Studio** permette di testare flussi di chiamate concatenate dir
         close: closeFlowStudio,
         toggle: toggleFlowStudio,
         run: runActiveScenario,
+        getActiveBearerToken,
         interpolateVariables,
         extractValueByPath,
         getState: () => state
