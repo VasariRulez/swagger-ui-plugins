@@ -293,16 +293,17 @@
     }
 
     function cloneStep(step) {
+        const rawExtract = Array.isArray(step.extract) ? step.extract : (Array.isArray(step.extractions) ? step.extractions : []);
         return {
             id: step.id || `step_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
             name: step.name || "API Step",
             method: (step.method || "GET").toUpperCase(),
             path: step.path || "/",
-            useAuth: step.useAuth !== false,
+            useAuth: step.useAuth !== false && step.inheritAuth !== false,
             queryParams: Array.isArray(step.queryParams) ? [...step.queryParams.map(p => ({ ...p }))] : [],
             headers: Array.isArray(step.headers) ? [...step.headers.map(h => ({ ...h }))] : [],
             body: step.body !== undefined ? step.body : "",
-            extract: Array.isArray(step.extract) ? [...step.extract.map(e => ({ ...e }))] : []
+            extract: rawExtract.map(e => ({ path: e.path || e.jsonPath || "", varName: e.varName || "" }))
         };
     }
 
