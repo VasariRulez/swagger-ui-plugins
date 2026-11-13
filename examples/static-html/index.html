@@ -37,6 +37,46 @@
         };
     </script>
 
+    <!-- Optional Flow Runner Configuration (Predefined Scenarios) -->
+    <script>
+        window.SwaggerFlowRunnerConfig = {
+            activityBarOrder: 35,
+            defaultDelayMs: 250,
+            stopOnError: true,
+            scenarios: [
+                {
+                    id: "demo-petstore-flow",
+                    name: "Demo: Add Pet & Find by ID",
+                    description: "Adds a new pet to the store and queries it using the extracted ID.",
+                    steps: [
+                        {
+                            id: "step-1",
+                            name: "1. Add New Pet",
+                            method: "POST",
+                            path: "/v2/pet",
+                            inheritAuth: false,
+                            body: JSON.stringify({
+                                name: "Fluffy",
+                                photoUrls: ["https://example.com/cat.jpg"],
+                                status: "available"
+                            }, null, 2),
+                            extractions: [
+                                { jsonPath: "id", varName: "petId" }
+                            ]
+                        },
+                        {
+                            id: "step-2",
+                            name: "2. Get Pet by ID",
+                            method: "GET",
+                            path: "/v2/pet/{{petId}}",
+                            inheritAuth: false
+                        }
+                    ]
+                }
+            ]
+        };
+    </script>
+
     <!-- Plugins Suite -->
     <script src="../../plugins/activity-bar/swagger-activity-bar.js"></script>
     <script src="../../plugins/spotlight-search/swagger-spotlight-search.js"></script>
@@ -47,5 +87,6 @@
     <script src="../../plugins/jwt-inspector/swagger-jwt-inspector.js"></script>
     <script src="../../plugins/signalr-tester/signalr.min.js"></script>
     <script src="../../plugins/signalr-tester/swagger-signalr-tester.js"></script>
+    <script src="../../plugins/flow-runner/swagger-flow-runner.js"></script>
 </body>
 </html>

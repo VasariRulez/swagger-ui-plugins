@@ -42,6 +42,9 @@ if (app.Environment.IsDevelopment())
         // 6. SignalR Hub Tester (requires signalr.min.js first)
         options.InjectJavascript("/plugins/signalr-tester/signalr.min.js");
         options.InjectJavascript("/plugins/signalr-tester/swagger-signalr-tester.js");
+
+        // 7. Multi-Step Scenario Flow Runner
+        options.InjectJavascript("/plugins/flow-runner/swagger-flow-runner.js");
     });
 }
 

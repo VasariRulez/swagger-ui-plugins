@@ -9,7 +9,7 @@ The **Activity Bar** attaches a vertical toolbar to the left edge of Swagger UI,
 ## Features
 
 - **VS Code-style Activity Dock**: Docked vertically on the left edge with customizable icon buttons, active indicators, and notification badges.
-- **Unified Sidebar / Drawer Manager**: Manages opening, closing, and toggling of flyout drawers and tools from registered plugins (e.g. Network History, SignalR Tester, Spotlight Search, JWT Inspector).
+- **Unified Sidebar / Drawer Manager**: Manages opening, closing, and toggling of flyout drawers and tools from registered plugins (e.g. Network History, SignalR Tester, Spotlight Search, JWT Inspector, Flow Runner).
 - **Interactive Extensions Guide (Help Center)**: Built-in modal dialog documenting every active plugin, keyboard shortcut, configuration snippet, and interactive walkthrough.
 - **Runtime Internationalization (i18n) & Language Switcher**: Built-in `🌐 EN | IT` interactive toggle pinned to the bottom of the bar, providing instant runtime translation across all suite plugins with `localStorage` persistence.
 - **Dynamic Plugin Self-Registration API (`window.SwaggerActivityBar.registerPluginGuide`)**: Other plugins automatically register their metadata, badges, and documentation cards when loaded.

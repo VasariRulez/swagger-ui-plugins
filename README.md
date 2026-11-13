@@ -19,6 +19,7 @@ Zero external build steps. Vanilla JavaScript and CSS. Fully compatible with sta
 | **Pretty JSON View** | [`plugins/pretty-json-view`](./plugins/pretty-json-view) | Collapsible tree view, HTTP method color coding, copy, download, and raw view toggle. |
 | **DTO Presets Generator** | [`plugins/dto-presets`](./plugins/dto-presets) | Polymorphic body generator (`$type`), custom developer presets saved in `localStorage`. |
 | **Token Interceptor** | [`plugins/token-interceptor`](./plugins/token-interceptor) | Enterprise SSO bridge exchanging identity provider tokens for application Bearer tokens. |
+| **Flow Runner & Scenarios** | [`plugins/flow-runner`](./plugins/flow-runner) | Sequential multi-step workflow tester with variable piping (`{{var}}`), response extraction & auth inheritance. |
 
 ---
 
@@ -43,6 +44,9 @@ swagger-ui-plugins/
     ├── dto-presets/
     │   ├── README.md
     │   └── swagger-dto-presets.js
+    ├── flow-runner/
+    │   ├── README.md
+    │   └── swagger-flow-runner.js
     ├── jwt-inspector/
     │   ├── README.md
     │   └── swagger-jwt-inspector.js
@@ -90,9 +94,10 @@ app.UseSwaggerUI(c =>
     c.InjectJavascript("/plugins/network-history/swagger-network-history.js");
     c.InjectJavascript("/plugins/jwt-inspector/swagger-jwt-inspector.js");
 
-    // Real-Time SignalR
+    // Real-Time & Scenario Testing
     c.InjectJavascript("/plugins/signalr-tester/signalr.min.js");
     c.InjectJavascript("/plugins/signalr-tester/swagger-signalr-tester.js");
+    c.InjectJavascript("/plugins/flow-runner/swagger-flow-runner.js");
 });
 ```
 
