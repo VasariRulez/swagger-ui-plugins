@@ -18,10 +18,12 @@ A multi-step API workflow execution studio embedded directly inside Swagger UI. 
   - Non-invasive spec indexing: click "+ Step" and browse all operations grouped by tags directly from Swagger UI's parsed OpenAPI spec (`ui.getState().get("spec")`).
 - **Inherited Bearer Authorization**:
   - Automatically borrows active Bearer tokens from Swagger UI's Redux authorization state (`state.auth.authorized`) with per-step toggle.
-- **Host Predefined Scenarios & Local Persistence**:
-  - Supply backend scenarios via `window.SwaggerFlowRunnerConfig.scenarios`.
-  - Create and edit custom scenarios saved locally in browser `localStorage`.
-  - JSON Import / Export for team sharing.
+- **Session Variables in `sessionStorage`**:
+  - Live variables extracted during flow runs are stored strictly in `sessionStorage` for tab isolation, preventing cross-tab pollution and ensuring auto-cleanup when the browser tab closes.
+  - Custom scenarios and runner settings remain safely persisted in `localStorage`.
+- **Live Variable Inspector & Detail Modal**:
+  - Compact sidebar panel capped at ~5-7 rows with smooth vertical scroll.
+  - Click any variable row or the 🔍 icon to open an interactive modal with full formatted view (JSON auto-indentation, JWT decoding with expiry inspection, raw view), 1-click clipboard copy, and live in-place value editing without re-running the workflow.
 - **Interactive 2-Column Flow Studio**:
   - Left column: Scenario switcher, step sequence reordering, step status badges (`WAITING`, `RUNNING`, `SUCCESS`, `FAILED`, `SKIPPED`), execution metrics, and Live Variable Inspector.
   - Right column: Step request editor, headers/body inputs, extraction rule builder, and live formatted response view.
@@ -198,6 +200,9 @@ window.SwaggerFlowRunner.toggle();
 
 // Run the currently active scenario sequentially
 await window.SwaggerFlowRunner.run();
+
+// Open variable inspection & editing modal
+window.SwaggerFlowRunner.openVariableDetail("candidateId");
 
 // Interpolate variables into arbitrary strings
 const resolved = window.SwaggerFlowRunner.interpolateVariables(

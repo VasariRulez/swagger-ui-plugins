@@ -136,7 +136,15 @@
             promptCloneScenarioName: "Enter name for cloned scenario:",
             importSuccess: "Imported {count} scenario(s) successfully!",
             importError: "Invalid scenario JSON format.",
-            variableInterpolationError: "Warning: Unresolved variable {{var}} in request."
+            variableInterpolationError: "Warning: Unresolved variable {{var}} in request.",
+            clickToInspectVar: "Click to inspect or edit variable",
+            inspectVariable: "Inspect Variable",
+            copyVariable: "Copy Value",
+            deleteVariable: "Delete Variable",
+            varModalTitle: "Variable Detail",
+            varEditTitle: "Variable Value (Editable):",
+            btnSaveVar: "💾 Save Value",
+            varSavedFeedback: "✓ Saved to Session!"
         },
         it: {
             activityBarTitle: "Runner Flussi API e Scenari a Catena",
@@ -211,7 +219,15 @@
             promptCloneScenarioName: "Inserisci il nome dello scenario clonato:",
             importSuccess: "Importati con successo {count} scenari!",
             importError: "Formato file JSON non valido.",
-            variableInterpolationError: "Attenzione: variabile non risolta {{var}} nella richiesta."
+            variableInterpolationError: "Attenzione: variabile non risolta {{var}} nella richiesta.",
+            clickToInspectVar: "Clicca per ispezionare o modificare la variabile",
+            inspectVariable: "Ispeziona Variabile",
+            copyVariable: "Copia Valore",
+            deleteVariable: "Elimina Variabile",
+            varModalTitle: "Dettaglio Variabile",
+            varEditTitle: "Valore Variabile (Modificabile):",
+            btnSaveVar: "💾 Salva Valore",
+            varSavedFeedback: "✓ Salvato nella Sessione!"
         }
     };
 
@@ -301,9 +317,22 @@
                 state.activeScenarioId = state.scenarios[0].id;
             }
 
-            const storedVars = localStorage.getItem(CONFIG.STORAGE_KEYS.VARIABLES);
-            if (storedVars) {
-                state.variables = JSON.parse(storedVars);
+            // Session variables: stored in sessionStorage for tab-isolation and clean session state
+            try {
+                let storedVars = sessionStorage.getItem(CONFIG.STORAGE_KEYS.VARIABLES);
+                if (!storedVars) {
+                    // One-time legacy migration from localStorage if present
+                    storedVars = localStorage.getItem(CONFIG.STORAGE_KEYS.VARIABLES);
+                    if (storedVars) {
+                        sessionStorage.setItem(CONFIG.STORAGE_KEYS.VARIABLES, storedVars);
+                        localStorage.removeItem(CONFIG.STORAGE_KEYS.VARIABLES);
+                    }
+                }
+                if (storedVars) {
+                    state.variables = JSON.parse(storedVars);
+                }
+            } catch (e) {
+                console.warn("[Swagger Flow Runner] Error reading session variables:", e);
             }
 
             const storedSettings = localStorage.getItem(CONFIG.STORAGE_KEYS.SETTINGS);
@@ -345,9 +374,9 @@
 
     function saveVariables() {
         try {
-            localStorage.setItem(CONFIG.STORAGE_KEYS.VARIABLES, JSON.stringify(state.variables));
+            sessionStorage.setItem(CONFIG.STORAGE_KEYS.VARIABLES, JSON.stringify(state.variables));
         } catch (e) {
-            console.warn("[Swagger Flow Runner] Error saving variables:", e);
+            console.warn("[Swagger Flow Runner] Error saving session variables:", e);
         }
     }
 
@@ -1207,29 +1236,251 @@
                 font-size: 11px;
             }
 
-            /* Variables Box */
+            /* Variables Box (Restricted height ~5-7 rows with smooth scroll) */
             .swp-fr-vars-box {
-                max-height: 120px;
+                max-height: 165px;
+                min-height: 44px;
                 overflow-y: auto;
-                padding: 8px;
+                padding: 4px;
                 border: 1px solid var(--swp-fr-border-light);
                 border-radius: 6px;
                 background: var(--swp-fr-sidebar-bg);
+                display: flex;
+                flex-direction: column;
+                gap: 3px;
+            }
+            .swp-fr-var-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 4px 8px;
+                border: 1px solid var(--swp-fr-border-light);
+                border-radius: 4px;
+                background: var(--swp-fr-bg);
+                cursor: pointer;
+                transition: background 0.15s ease, border-color 0.15s ease;
+            }
+            .swp-fr-var-row:hover {
+                background: var(--swp-fr-card-hover);
+                border-color: var(--swp-fr-primary);
+            }
+            .swp-fr-var-info {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                overflow: hidden;
+                white-space: nowrap;
+                text-overflow: ellipsis;
+                flex: 1 1 auto;
                 font-size: 11px;
+            }
+            .swp-fr-var-key {
+                font-weight: 700;
+                color: var(--swp-fr-primary);
                 font-family: monospace;
             }
-            .swp-fr-var-chip {
-                display: inline-flex;
+            .swp-fr-var-val {
+                color: var(--swp-fr-text-muted);
+                font-family: monospace;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .swp-fr-var-actions {
+                display: flex;
                 align-items: center;
-                gap: 5px;
-                padding: 2px 6px;
-                margin: 2px;
-                border-radius: 4px;
+                gap: 2px;
+                flex-shrink: 0;
+                margin-left: 6px;
+            }
+            .swp-fr-btn-icon {
+                padding: 2px 4px;
+                font-size: 11px;
+                border: none;
+                background: none;
+                color: var(--swp-fr-text-muted);
+                cursor: pointer;
+                border-radius: 3px;
+                transition: all 0.1s ease;
+                line-height: 1;
+            }
+            .swp-fr-btn-icon:hover {
                 background: var(--swp-fr-border-light);
                 color: var(--swp-fr-text);
             }
+
+            /* Sub-modal Overlay & Window for Variable Inspection */
+            .swp-fr-submodal-overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.65);
+                z-index: 10000001;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                backdrop-filter: blur(2px);
+            }
+            .swp-fr-submodal-window {
+                width: 620px;
+                max-width: 90vw;
+                background: var(--swp-fr-bg);
+                color: var(--swp-fr-text);
+                border: 1px solid var(--swp-fr-border);
+                border-radius: 8px;
+                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+                animation: swp-fr-fade-in 0.15s ease-out;
+            }
         `;
         document.head.appendChild(style);
+    }
+
+    /**
+     * Opens a dedicated inspection & editing modal for a session variable.
+     * @param {string} varKey
+     */
+    function openVariableDetailModal(varKey) {
+        closeVariableDetailModal();
+        const rawVal = state.variables[varKey] !== undefined ? String(state.variables[varKey]) : "";
+        let isJson = false;
+        let formattedVal = rawVal;
+        try {
+            if (rawVal.startsWith("{") || rawVal.startsWith("[")) {
+                const parsed = JSON.parse(rawVal);
+                formattedVal = JSON.stringify(parsed, null, 2);
+                isJson = true;
+            }
+        } catch {}
+
+        let isJwt = false;
+        let jwtPayloadDecoded = null;
+        if (rawVal.split(".").length === 3) {
+            try {
+                const parts = rawVal.split(".");
+                const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+                const jsonStr = decodeURIComponent(atob(base64).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join(""));
+                jwtPayloadDecoded = JSON.stringify(JSON.parse(jsonStr), null, 2);
+                isJwt = true;
+            } catch {}
+        }
+
+        const overlay = document.createElement("div");
+        overlay.id = "swp-fr-var-modal";
+        overlay.className = "swp-fr-submodal-overlay";
+
+        overlay.addEventListener("click", (e) => {
+            if (e.target === overlay) closeVariableDetailModal();
+        });
+
+        const escHandler = (e) => {
+            if (e.key === "Escape") {
+                closeVariableDetailModal();
+                window.removeEventListener("keydown", escHandler);
+            }
+        };
+        window.addEventListener("keydown", escHandler);
+
+        overlay.innerHTML = `
+            <div class="swp-fr-submodal-window">
+                <div style="padding:12px 16px;border-bottom:1px solid var(--swp-fr-border);display:flex;align-items:center;justify-content:space-between;background:var(--swp-fr-header-bg);">
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                        <span style="font-size:16px;">🔍</span>
+                        <strong style="font-size:14px;font-family:monospace;color:var(--swp-fr-primary);">{{${escapeHtml(varKey)}}}</strong>
+                        ${isJwt ? `<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#8b5cf6;color:#fff;font-weight:700;">JWT</span>` : ""}
+                        ${isJson ? `<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#0284c7;color:#fff;font-weight:700;">JSON</span>` : ""}
+                        <span style="font-size:11px;color:var(--swp-fr-text-muted);">${rawVal.length} chars</span>
+                    </div>
+                    <button type="button" class="swp-fr-close-btn" id="swp-fr-btn-var-close">✕</button>
+                </div>
+                <div style="padding:16px;display:flex;flex-direction:column;gap:12px;max-height:75vh;overflow-y:auto;">
+                    <div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                            <label style="font-size:12px;font-weight:700;">${t("varEditTitle", "Variable Value (Editable):")}</label>
+                            <div style="display:flex;gap:6px;">
+                                ${isJson ? `<button type="button" class="swp-fr-btn-xs" id="swp-fr-btn-var-fmt">${t("btnFormatJson", "Format JSON")}</button>` : ""}
+                                <button type="button" class="swp-fr-btn-xs" id="swp-fr-btn-var-copy">${t("copyVariable", "📋 Copy")}</button>
+                            </div>
+                        </div>
+                        <textarea class="swp-fr-textarea" id="swp-fr-var-val-input" style="height:200px;font-family:monospace;font-size:12px;white-space:pre;word-break:break-all;">${escapeHtml(formattedVal)}</textarea>
+                    </div>
+                    ${jwtPayloadDecoded ? `
+                    <div>
+                        <label style="font-size:11px;font-weight:700;color:var(--swp-fr-text-muted);text-transform:uppercase;margin-bottom:4px;display:block;">JWT Payload (Decoded):</label>
+                        <pre style="background:var(--swp-fr-sidebar-bg);padding:10px;border-radius:6px;font-size:11px;max-height:160px;overflow-y:auto;border:1px solid var(--swp-fr-border-light);margin:0;font-family:monospace;">${escapeHtml(jwtPayloadDecoded)}</pre>
+                    </div>
+                    ` : ""}
+                </div>
+                <div style="padding:10px 16px;border-top:1px solid var(--swp-fr-border);display:flex;align-items:center;justify-content:space-between;background:var(--swp-fr-sidebar-bg);">
+                    <button type="button" class="swp-fr-btn-xs" id="swp-fr-btn-var-del" style="color:#ef4444;border-color:rgba(239,68,68,0.3);">${t("deleteVariable", "🗑️ Delete Variable")}</button>
+                    <div style="display:flex;gap:8px;">
+                        <button type="button" class="swp-fr-btn-xs" id="swp-fr-btn-var-cancel">${t("closeModal", "Close")}</button>
+                        <button type="button" class="swp-fr-btn-run" id="swp-fr-btn-var-save" style="padding:5px 14px;font-size:12px;">${t("btnSaveVar", "💾 Save Value")}</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        overlay.querySelector("#swp-fr-btn-var-close")?.addEventListener("click", closeVariableDetailModal);
+        overlay.querySelector("#swp-fr-btn-var-cancel")?.addEventListener("click", closeVariableDetailModal);
+
+        overlay.querySelector("#swp-fr-btn-var-copy")?.addEventListener("click", () => {
+            const txt = overlay.querySelector("#swp-fr-var-val-input")?.value || "";
+            navigator.clipboard.writeText(txt).then(() => {
+                const btn = overlay.querySelector("#swp-fr-btn-var-copy");
+                if (btn) {
+                    const old = btn.textContent;
+                    btn.textContent = t("copiedFeedback", "✓ Copied!");
+                    setTimeout(() => { btn.textContent = old; }, 1200);
+                }
+            });
+        });
+
+        overlay.querySelector("#swp-fr-btn-var-fmt")?.addEventListener("click", () => {
+            const ta = overlay.querySelector("#swp-fr-var-val-input");
+            if (ta && ta.value) {
+                try {
+                    ta.value = JSON.stringify(JSON.parse(ta.value), null, 2);
+                } catch {}
+            }
+        });
+
+        overlay.querySelector("#swp-fr-btn-var-del")?.addEventListener("click", () => {
+            delete state.variables[varKey];
+            saveVariables();
+            closeVariableDetailModal();
+            renderModalContent();
+        });
+
+        overlay.querySelector("#swp-fr-btn-var-save")?.addEventListener("click", () => {
+            const ta = overlay.querySelector("#swp-fr-var-val-input");
+            if (ta) {
+                state.variables[varKey] = ta.value;
+                saveVariables();
+                const saveBtn = overlay.querySelector("#swp-fr-btn-var-save");
+                if (saveBtn) {
+                    const origText = saveBtn.textContent;
+                    saveBtn.textContent = t("varSavedFeedback", "✓ Saved to Session!");
+                    setTimeout(() => {
+                        closeVariableDetailModal();
+                        renderModalContent();
+                    }, 500);
+                } else {
+                    closeVariableDetailModal();
+                    renderModalContent();
+                }
+            }
+        });
+    }
+
+    function closeVariableDetailModal() {
+        const modal = document.getElementById("swp-fr-var-modal");
+        if (modal) modal.remove();
     }
 
     /**
@@ -1268,6 +1519,7 @@
     }
 
     function closeFlowStudio() {
+        closeVariableDetailModal();
         const existing = document.getElementById(CONFIG.ELEMENT_IDS.MODAL);
         if (existing) existing.remove();
         if (window.SwaggerActivityBar?.setItemActive) {
@@ -1344,11 +1596,25 @@
                 `;
             }).join("");
 
-        let varChips = Object.entries(state.variables).map(([k, v]) => `
-            <span class="swp-fr-var-chip" title="${escapeHtml(v)}">
-                <strong>{{${escapeHtml(k)}}}:</strong> ${escapeHtml(v.length > 20 ? v.slice(0, 18) + "..." : v)}
-            </span>
-        `).join("");
+        let varRows = Object.entries(state.variables).map(([k, v]) => {
+            const strVal = typeof v === "object" ? JSON.stringify(v) : String(v !== undefined && v !== null ? v : "");
+            const preview = strVal.length > 22 ? strVal.slice(0, 20) + "..." : strVal;
+            const lenBadge = strVal.length > 30 ? `${strVal.length}ch` : "";
+            return `
+                <div class="swp-fr-var-row" data-var-key="${escapeHtml(k)}" title="${t("clickToInspectVar", "Click to inspect or edit variable")}">
+                    <div class="swp-fr-var-info" data-action="view-var" data-var-key="${escapeHtml(k)}">
+                        <span class="swp-fr-var-key">{{${escapeHtml(k)}}}:</span>
+                        <span class="swp-fr-var-val">${escapeHtml(preview)}</span>
+                        ${lenBadge ? `<span style="font-size:9px;color:var(--swp-fr-text-muted);opacity:0.75;margin-left:auto;">${lenBadge}</span>` : ""}
+                    </div>
+                    <div class="swp-fr-var-actions">
+                        <button type="button" class="swp-fr-btn-icon" data-action="view-var" data-var-key="${escapeHtml(k)}" title="${t("inspectVariable", "Inspect Variable")}">🔍</button>
+                        <button type="button" class="swp-fr-btn-icon" data-action="copy-var" data-var-key="${escapeHtml(k)}" title="${t("copyVariable", "Copy Value")}">📋</button>
+                        <button type="button" class="swp-fr-btn-icon" data-action="delete-var" data-var-key="${escapeHtml(k)}" title="${t("deleteVariable", "Delete Variable")}">✕</button>
+                    </div>
+                </div>
+            `;
+        }).join("");
 
         let leftColHtml = `
             <div class="swp-fr-col-left">
@@ -1395,7 +1661,7 @@
                         ${Object.keys(state.variables).length > 0 ? `<button type="button" class="swp-fr-btn-xs" id="swp-fr-btn-clear-vars" style="font-size:10px;padding:2px 6px;">${t("btnClearVariables", "Clear")}</button>` : ""}
                     </div>
                     <div class="swp-fr-vars-box">
-                        ${varChips || `<span style="color:var(--swp-fr-text-muted);">${t("noVariablesNotice", "No variables")}</span>`}
+                        ${varRows || `<span style="color:var(--swp-fr-text-muted);padding:8px;text-align:center;display:block;">${t("noVariablesNotice", "No variables stored yet.")}</span>`}
                     </div>
                 </div>
 
@@ -1739,11 +2005,44 @@
             });
         });
 
-        // Clear Variables
+        // Variables Box Actions (Inspect, Copy, Delete single, Clear all)
         win.querySelector("#swp-fr-btn-clear-vars")?.addEventListener("click", () => {
             state.variables = {};
-            saveVariables();
+            try { sessionStorage.removeItem(CONFIG.STORAGE_KEYS.VARIABLES); } catch {}
             renderModalContent();
+        });
+
+        win.querySelectorAll(".swp-fr-var-row").forEach(row => {
+            row.addEventListener("click", (e) => {
+                const varKey = row.getAttribute("data-var-key");
+                if (!varKey) return;
+
+                // Copy Action
+                const copyBtn = e.target.closest('[data-action="copy-var"]');
+                if (copyBtn) {
+                    e.stopPropagation();
+                    const val = state.variables[varKey] !== undefined ? String(state.variables[varKey]) : "";
+                    navigator.clipboard.writeText(val).then(() => {
+                        const orig = copyBtn.textContent;
+                        copyBtn.textContent = "✓";
+                        setTimeout(() => { copyBtn.textContent = orig; }, 1000);
+                    });
+                    return;
+                }
+
+                // Delete Action
+                const delBtn = e.target.closest('[data-action="delete-var"]');
+                if (delBtn) {
+                    e.stopPropagation();
+                    delete state.variables[varKey];
+                    saveVariables();
+                    renderModalContent();
+                    return;
+                }
+
+                // View / Edit Action (Clicking anywhere on the row or view button)
+                openVariableDetailModal(varKey);
+            });
         });
 
         // Runner Controls
@@ -2129,6 +2428,8 @@ Il **Flow Runner Studio** permette di testare flussi di chiamate concatenate dir
         close: closeFlowStudio,
         toggle: toggleFlowStudio,
         run: runActiveScenario,
+        openVariableDetail: openVariableDetailModal,
+        closeVariableDetail: closeVariableDetailModal,
         getActiveBearerToken,
         getAuthorizedSecuritySchemes,
         getTokenForScheme,
