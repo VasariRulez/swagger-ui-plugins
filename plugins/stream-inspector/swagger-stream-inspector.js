@@ -427,14 +427,17 @@
             const fetchOptions = {
                 method: streamState.method,
                 headers: streamState.headers,
-                signal: streamState.abortController.signal
+                signal: streamState.abortController.signal,
+                isStreaming: true
             };
 
             if (streamState.method !== "GET" && streamState.method !== "HEAD" && streamState.body) {
                 fetchOptions.body = streamState.body;
             }
 
-            const response = await fetch(streamState.url, fetchOptions);
+            // Always prioritize native unpatched fetch if available to completely bypass interceptors
+            const fetchFn = window.__swpOriginalFetch || window.fetch;
+            const response = await fetchFn(streamState.url, fetchOptions);
 
             console.info(`[SwaggerStreamInspector] Connected! HTTP ${response.status} ${response.statusText}`, {
                 contentType: response.headers.get("content-type")

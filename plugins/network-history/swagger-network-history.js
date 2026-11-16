@@ -537,10 +537,45 @@
     }
 
     /**
+     * Determines whether a request is an active stream (SSE / NDJSON) that must bypass history tracking.
+     * @param {any} input
+     * @param {any} init
+     * @returns {boolean}
+     */
+    function isStreamingCall(input, init) {
+        if (init && (init.isStreaming || init["isStreaming"])) return true;
+
+        const headers = init?.headers || (input instanceof Request ? input.headers : null);
+        if (headers) {
+            let accept = "";
+            if (typeof headers.get === "function") {
+                accept = headers.get("accept") || "";
+            } else if (Array.isArray(headers)) {
+                const found = headers.find(([k]) => String(k).toLowerCase() === "accept");
+                if (found) accept = String(found[1] || "");
+            } else if (typeof headers === "object") {
+                const key = Object.keys(headers).find(k => k.toLowerCase() === "accept");
+                if (key) accept = String(headers[key] || "");
+            }
+            if (accept.includes("text/event-stream") || accept.includes("ndjson") || accept.includes("stream+json")) {
+                return true;
+            }
+        }
+
+        const url = (typeof input === "string" ? input : (input?.url || "")).toLowerCase();
+        if (url.includes("/stream") || url.includes("-stream") || url.includes("stream-")) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Installa l'intercettore fetch globale non distruttivo.
      */
     function installFetchInterceptor() {
-        const originalFetch = window.fetch;
+        window.__swpOriginalFetch = window.__swpOriginalFetch || window.fetch;
+        const originalFetch = window.__swpOriginalFetch;
         if (!originalFetch) return;
 
         window.fetch = async function (...args) {
@@ -557,8 +592,8 @@
                 requestMethod = (requestInput.method || requestMethod).toUpperCase();
             }
 
-            // Se la richiesta non deve essere tracciata, esegui il fetch originale trasparente
-            if (!shouldInterceptRequest(requestUrl)) {
+            // Se la richiesta non deve essere tracciata o è uno stream in tempo reale, esegui il fetch originale trasparente
+            if (!shouldInterceptRequest(requestUrl) || isStreamingCall(requestInput, requestInit)) {
                 return originalFetch.apply(this, args);
             }
 

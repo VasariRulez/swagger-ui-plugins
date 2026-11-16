@@ -666,7 +666,8 @@
     // 8. INTERNET NETWORK INTERCEPTOR (Fetch wrapper)
     // =========================================================================
 
-    const originalFetch = window.fetch.bind(window);
+    window.__swpOriginalFetch = window.__swpOriginalFetch || window.fetch.bind(window);
+    const originalFetch = window.__swpOriginalFetch;
 
     function getRequestUrl(resource) {
         if (resource instanceof Request) {
