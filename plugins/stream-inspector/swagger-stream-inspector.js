@@ -222,6 +222,44 @@
     // 3. READABLE STREAM & SSE PARSER ENGINE
     // =========================================================================
     /**
+     * Safely extracts token string from a Swagger authorized scheme entry,
+     * supporting direct string values, nested OAuth2/MSAL token objects, and API keys.
+     * @param {object} schemeData
+     * @returns {string}
+     */
+    function extractTokenFromSchemeData(schemeData) {
+        if (!schemeData) return "";
+
+        // 1. Direct Bearer token value
+        const val = typeof schemeData.get === "function" ? schemeData.get("value") : schemeData.value;
+        if (typeof val === "string" && val.trim()) {
+            return val.replace(/^Bearer\s+/i, "").trim();
+        }
+
+        // 2. Nested token object (OAuth2 / MSAL / OpenID)
+        const nested = typeof schemeData.get === "function" ? schemeData.get("token") : schemeData.token;
+        if (nested) {
+            if (typeof nested === "string" && nested.trim()) {
+                return nested.replace(/^Bearer\s+/i, "").trim();
+            }
+            const access = typeof nested.get === "function"
+                ? (nested.get("access_token") || nested.get("token"))
+                : (nested.access_token || nested.token);
+            if (typeof access === "string" && access.trim()) {
+                return access.replace(/^Bearer\s+/i, "").trim();
+            }
+        }
+
+        // 3. Direct apiKey
+        const apiKey = typeof schemeData.get === "function" ? schemeData.get("apiKey") : schemeData.apiKey;
+        if (typeof apiKey === "string" && apiKey.trim()) {
+            return apiKey.trim();
+        }
+
+        return "";
+    }
+
+    /**
      * Retrieves active Authorization header from Swagger UI Redux state if present.
      */
     function getActiveSwaggerBearerToken() {
@@ -231,12 +269,12 @@
             if (!authMap) return "";
             const authObj = typeof authMap.toJS === "function" ? authMap.toJS() : authMap;
             for (const [, schemeData] of Object.entries(authObj)) {
-                if (schemeData && typeof schemeData === "object") {
-                    const token = schemeData.value || schemeData.token || schemeData.apiKey;
-                    if (token) return token;
-                }
+                const token = extractTokenFromSchemeData(schemeData);
+                if (token) return token;
             }
-        } catch {}
+        } catch (e) {
+            console.warn("[SwaggerStreamInspector] Error extracting bearer token:", e);
+        }
         return "";
     }
 
@@ -260,7 +298,7 @@
         const hasAuth = Object.keys(streamState.headers).some(k => k.toLowerCase() === "authorization");
         if (!hasAuth && streamState.useAuth !== false) {
             const bearer = getActiveSwaggerBearerToken();
-            if (bearer) {
+            if (bearer && typeof bearer === "string") {
                 streamState.headers["Authorization"] = bearer.startsWith("Bearer ") ? bearer : `Bearer ${bearer}`;
             }
         }
