@@ -67,6 +67,11 @@
         /** Preconfigured or fallback streaming endpoints */
         ENDPOINTS: Array.isArray(userConfig.endpoints) ? userConfig.endpoints : [],
 
+        /** Security Scheme Preferences for Multi-Auth environments */
+        PREFERRED_SCHEME: userConfig.preferredScheme || null,
+        APP_BEARER_SCHEME: userConfig.appBearerScheme || null,
+        MSAL_SCHEME: userConfig.msalScheme || null,
+
         /** Language Setting */
         LOCALE: userConfig.locale || "auto"
     };
@@ -80,6 +85,7 @@
         headers: {},
         body: "",
         useAuth: true,
+        selectedScheme: "auto",
         abortController: null,
         reader: null,
         events: [],
@@ -132,6 +138,7 @@
             otherEndpointsGroup: "All Swagger Endpoints",
             autoDetectTooltip: "Rule for automatic listing: Endpoints appear under 'Detected Streaming' if their OpenAPI specification declares a response Content-Type such as 'text/event-stream' or 'application/x-ndjson' (in 'produces' or 'responses.content'), or matches window.SwaggerStreamInspectorConfig.endpoints. You can also select any other endpoint from the list or type any custom URL/path directly below.",
             useBearerAuth: "Bearer Auth",
+            authAutoScheme: "Auto (Bearer Priority)",
             requestBodyLabel: "Request Body (JSON / Text):",
             guideDescription: "Inspects and tests Server-Sent Events (SSE), NDJSON, and chunked transfer endpoints in real time with packet latency, filtering, and export."
         },
@@ -168,6 +175,7 @@
             otherEndpointsGroup: "Tutti gli Endpoint Swagger",
             autoDetectTooltip: "Regola per la lista automatica: gli endpoint appaiono tra gli 'Endpoint di Streaming Rilevati' se nella specifica OpenAPI dichiarano un Content-Type di risposta come 'text/event-stream' o 'application/x-ndjson' (in 'produces' o 'responses.content'), oppure se configurati in window.SwaggerStreamInspectorConfig.endpoints. Puoi comunque selezionare qualsiasi altro endpoint dall'elenco o digitare un URL/percorso personalizzato sotto.",
             useBearerAuth: "Bearer Auth",
+            authAutoScheme: "Auto (Priorità Bearer)",
             requestBodyLabel: "Body della Richiesta (JSON / Testo):",
             guideDescription: "Ispeziona e testa in tempo reale endpoint Server-Sent Events (SSE), NDJSON e stream chunked con metriche di latenza, filtri ed export."
         }
@@ -260,16 +268,110 @@
     }
 
     /**
-     * Retrieves active Authorization header from Swagger UI Redux state if present.
+     * Lists all authorized security scheme names currently present in Swagger UI Redux store.
+     * @returns {string[]}
      */
-    function getActiveSwaggerBearerToken() {
-        if (!window.ui || typeof window.ui.getState !== "function") return "";
+    function getAuthorizedSecuritySchemes() {
+        const schemes = [];
         try {
-            const authMap = window.ui.getState().get("auth")?.get("authorized");
-            if (!authMap) return "";
-            const authObj = typeof authMap.toJS === "function" ? authMap.toJS() : authMap;
-            for (const [, schemeData] of Object.entries(authObj)) {
-                const token = extractTokenFromSchemeData(schemeData);
+            const ui = window.ui;
+            if (!ui || typeof ui.getState !== "function") return schemes;
+            const authState = ui.getState().get("auth");
+            if (!authState) return schemes;
+            const authorized = authState.get("authorized");
+            if (!authorized) return schemes;
+
+            if (typeof authorized.keys === "function") {
+                for (const key of authorized.keys()) {
+                    if (key && !schemes.includes(key)) schemes.push(key);
+                }
+            } else if (typeof authorized === "object") {
+                for (const key of Object.keys(authorized)) {
+                    if (key && !schemes.includes(key)) schemes.push(key);
+                }
+            }
+        } catch (e) {
+            console.warn("[SwaggerStreamInspector] Error listing authorized schemes:", e);
+        }
+        return schemes;
+    }
+
+    /**
+     * Extracts token value string for a specific authorized scheme by name.
+     * @param {string} schemeName
+     * @returns {string}
+     */
+    function getTokenForScheme(schemeName) {
+        if (!schemeName) return "";
+        try {
+            const ui = window.ui;
+            if (!ui || typeof ui.getState !== "function") return "";
+            const authorized = ui.getState().get("auth")?.get("authorized");
+            if (!authorized) return "";
+            const entry = typeof authorized.get === "function" ? authorized.get(schemeName) : authorized[schemeName];
+            return extractTokenFromSchemeData(entry);
+        } catch (e) {
+            console.warn("[SwaggerStreamInspector] Error getting token for scheme:", schemeName, e);
+        }
+        return "";
+    }
+
+    /**
+     * Retrieves active Authorization header from Swagger UI Redux state if present,
+     * following user configuration and priority rules for multi-scheme setups.
+     * @param {string} [preferredScheme]
+     * @returns {string}
+     */
+    function getActiveSwaggerBearerToken(preferredScheme = null) {
+        try {
+            // 0. Explicit scheme parameter (e.g. from UI selector)
+            if (preferredScheme && preferredScheme !== "auto") {
+                const token = getTokenForScheme(preferredScheme);
+                if (token) return token;
+            }
+
+            // 1. Explicit preferred scheme from plugin configuration
+            if (CONFIG.PREFERRED_SCHEME) {
+                const token = getTokenForScheme(CONFIG.PREFERRED_SCHEME);
+                if (token) return token;
+            }
+
+            // 2. Prioritize configured or standard Application Bearer schemes
+            const appBearerCandidates = [
+                CONFIG.APP_BEARER_SCHEME,
+                "Bearer",
+                "BearerAuth",
+                "appBearer",
+                "AppBearer"
+            ];
+            for (const schemeName of appBearerCandidates) {
+                if (!schemeName) continue;
+                const token = getTokenForScheme(schemeName);
+                if (token) return token;
+            }
+
+            // 3. Fallback: inspect any authorized schemes excluding Identity Provider / OAuth2 schemes
+            const allSchemes = getAuthorizedSecuritySchemes();
+            const idpSchemes = [
+                (CONFIG.MSAL_SCHEME || "").toLowerCase(),
+                "msal",
+                "oauth2",
+                "azuread",
+                "oidc",
+                "openid",
+                "keycloak"
+            ].filter(Boolean);
+
+            for (const scheme of allSchemes) {
+                if (!idpSchemes.includes(scheme.toLowerCase())) {
+                    const token = getTokenForScheme(scheme);
+                    if (token) return token;
+                }
+            }
+
+            // 4. Last resort: check all schemes including Identity Provider schemes
+            for (const scheme of allSchemes) {
+                const token = getTokenForScheme(scheme);
                 if (token) return token;
             }
         } catch (e) {
@@ -297,7 +399,7 @@
         // Inherit Bearer token if not explicitly passed and auth is enabled
         const hasAuth = Object.keys(streamState.headers).some(k => k.toLowerCase() === "authorization");
         if (!hasAuth && streamState.useAuth !== false) {
-            const bearer = getActiveSwaggerBearerToken();
+            const bearer = getActiveSwaggerBearerToken(streamState.selectedScheme);
             if (bearer && typeof bearer === "string") {
                 streamState.headers["Authorization"] = bearer.startsWith("Bearer ") ? bearer : `Bearer ${bearer}`;
             }
@@ -959,10 +1061,15 @@
                         </label>
                         <span class="swp-si-help-tip" title="${escapeHtml(t("autoDetectTooltip"))}">?</span>
                     </div>
-                    <label style="font-size:11px;display:flex;align-items:center;gap:4px;cursor:pointer;color:var(--swp-si-text-muted);">
-                        <input type="checkbox" id="swp-stream-chk-auth" ${streamState.useAuth ? "checked" : ""}>
-                        <span>${escapeHtml(t("useBearerAuth"))}</span>
-                    </label>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <label style="font-size:11px;display:flex;align-items:center;gap:4px;cursor:pointer;color:var(--swp-si-text-muted);">
+                            <input type="checkbox" id="swp-stream-chk-auth" ${streamState.useAuth ? "checked" : ""}>
+                            <span>${escapeHtml(t("useBearerAuth"))}</span>
+                        </label>
+                        <select id="swp-stream-auth-scheme-select" class="swp-si-select" style="font-size:10px;padding:1px 4px;height:22px;max-width:140px;display:${streamState.useAuth ? "inline-block" : "none"};">
+                            <option value="auto">${escapeHtml(t("authAutoScheme"))}</option>
+                        </select>
+                    </div>
                 </div>
                 <select id="swp-stream-endpoint-select" class="swp-si-select">
                     <option value="">${escapeHtml(t("selectEndpointPlaceholder"))}</option>
@@ -1031,6 +1138,7 @@
         const bodyInput = drawer.querySelector("#swp-stream-body-input");
         const bodyWrap = drawer.querySelector("#swp-stream-body-wrap");
         const chkAuth = drawer.querySelector("#swp-stream-chk-auth");
+        const authSchemeSelect = drawer.querySelector("#swp-stream-auth-scheme-select");
 
         endpointSelect?.addEventListener("change", () => {
             const selectedOpt = endpointSelect.options[endpointSelect.selectedIndex];
@@ -1064,8 +1172,15 @@
             if (urlDisplay) urlDisplay.textContent = `${streamState.method} ${streamState.url}`;
         });
 
+        authSchemeSelect?.addEventListener("change", () => {
+            streamState.selectedScheme = authSchemeSelect.value;
+        });
+
         chkAuth?.addEventListener("change", () => {
             streamState.useAuth = chkAuth.checked;
+            if (authSchemeSelect) {
+                authSchemeSelect.style.display = chkAuth.checked ? "inline-block" : "none";
+            }
         });
 
         // Bind events
@@ -1075,6 +1190,7 @@
             const targetMethod = methodSelect?.value || streamState.method;
             const targetBody = bodyInput?.value || streamState.body;
             if (chkAuth) streamState.useAuth = chkAuth.checked;
+            if (authSchemeSelect) streamState.selectedScheme = authSchemeSelect.value;
 
             if (targetUrl) {
                 startStream(targetUrl, targetMethod, streamState.headers, targetBody);
@@ -1086,6 +1202,7 @@
             const targetMethod = methodSelect?.value || streamState.method;
             const targetBody = bodyInput?.value || streamState.body;
             if (chkAuth) streamState.useAuth = chkAuth.checked;
+            if (authSchemeSelect) streamState.selectedScheme = authSchemeSelect.value;
 
             if (targetUrl) {
                 startStream(targetUrl, targetMethod, streamState.headers, targetBody);
@@ -1199,6 +1316,25 @@
         select.innerHTML = html;
     }
 
+    /**
+     * Populates the Security Scheme dropdown with all active authorized schemes from Swagger UI Redux.
+     */
+    function populateAuthSchemeDropdown() {
+        const select = document.getElementById("swp-stream-auth-scheme-select");
+        if (!select) return;
+
+        const schemes = getAuthorizedSecuritySchemes();
+        let html = `<option value="auto">${escapeHtml(t("authAutoScheme"))}</option>`;
+
+        schemes.forEach(scheme => {
+            const isSelected = streamState.selectedScheme === scheme;
+            html += `<option value="${escapeHtml(scheme)}" ${isSelected ? "selected" : ""}>${escapeHtml(scheme)}</option>`;
+        });
+
+        select.innerHTML = html;
+        select.value = streamState.selectedScheme || "auto";
+    }
+
     function openStreamDrawer(options = {}) {
         createDrawerDOM();
         streamState.isOpen = true;
@@ -1211,6 +1347,7 @@
         }
 
         populateEndpointDropdown();
+        populateAuthSchemeDropdown();
 
         const drawer = document.getElementById(CONFIG.ELEMENT_IDS.DRAWER);
         const backdrop = document.getElementById(CONFIG.ELEMENT_IDS.BACKDROP);

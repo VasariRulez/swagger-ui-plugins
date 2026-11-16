@@ -94,6 +94,10 @@ window.SwaggerStreamInspectorConfig = {
         "/events/live"
     ],
 
+    // Security Schemes & Multi-Auth resolution
+    preferredScheme: "BearerAuth",  // Explicit priority scheme if multiple schemes are authorized
+    appBearerScheme: "Bearer",      // Application Bearer candidate (prioritized over IdP / OAuth2)
+
     // Activity Bar integration
     activityBar: {
         enabled: true,
