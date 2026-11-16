@@ -40,8 +40,7 @@
         /** Element IDs */
         ELEMENT_IDS: {
             DRAWER: "swp-stream-inspector-drawer",
-            STYLES: "swp-stream-inspector-styles",
-            BACKDROP: "swp-stream-inspector-backdrop"
+            STYLES: "swp-stream-inspector-styles"
         },
 
         /** Drawer & Buffer Settings */
@@ -734,20 +733,19 @@
                 --swp-si-shadow: -8px 0 35px rgba(0, 0, 0, 0.6);
             }
 
-            /* Backdrop */
-            #${CONFIG.ELEMENT_IDS.BACKDROP} {
-                position: fixed;
-                top: 0; left: 0; right: 0; bottom: 0;
-                background: rgba(15, 23, 42, 0.4);
-                backdrop-filter: blur(2px);
-                z-index: 999970;
-                opacity: 0;
-                pointer-events: none;
-                transition: opacity 0.25s ease;
+            /* --- Dynamic Side-by-Side Body Resizing (Like SignalR Tester) --- */
+            body {
+                transition: padding-right 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
             }
-            #${CONFIG.ELEMENT_IDS.BACKDROP}.is-open {
-                opacity: 1;
-                pointer-events: auto;
+
+            body.swp-stream-drawer-open {
+                padding-right: ${CONFIG.DRAWER_WIDTH_PX}px !important;
+            }
+
+            @media (max-width: 960px) {
+                body.swp-stream-drawer-open {
+                    padding-right: 0 !important;
+                }
             }
 
             /* Sliding Drawer */
@@ -1023,12 +1021,6 @@
     function createDrawerDOM() {
         if (document.getElementById(CONFIG.ELEMENT_IDS.DRAWER)) return;
         injectStyles();
-
-        // Backdrop
-        const backdrop = document.createElement("div");
-        backdrop.id = CONFIG.ELEMENT_IDS.BACKDROP;
-        backdrop.addEventListener("click", closeStreamDrawer);
-        document.body.appendChild(backdrop);
 
         // Drawer
         const drawer = document.createElement("div");
@@ -1350,7 +1342,6 @@
         populateAuthSchemeDropdown();
 
         const drawer = document.getElementById(CONFIG.ELEMENT_IDS.DRAWER);
-        const backdrop = document.getElementById(CONFIG.ELEMENT_IDS.BACKDROP);
         const urlDisplay = document.getElementById("swp-stream-url-display");
         const urlInput = document.getElementById("swp-stream-url-input");
         const methodSelect = document.getElementById("swp-stream-method-select");
@@ -1374,7 +1365,11 @@
         }
 
         drawer?.classList.add("is-open");
-        backdrop?.classList.add("is-open");
+        document.body.classList.add("swp-stream-drawer-open");
+
+        if (window.SwaggerActivityBar && typeof window.SwaggerActivityBar.setItemActive === "function") {
+            window.SwaggerActivityBar.setItemActive(CONFIG.PLUGIN_ID, true);
+        }
 
         if (options.autoStart) {
             startStream(streamState.url, streamState.method, streamState.headers, streamState.body);
@@ -1384,9 +1379,26 @@
     function closeStreamDrawer() {
         streamState.isOpen = false;
         const drawer = document.getElementById(CONFIG.ELEMENT_IDS.DRAWER);
-        const backdrop = document.getElementById(CONFIG.ELEMENT_IDS.BACKDROP);
         drawer?.classList.remove("is-open");
-        backdrop?.classList.remove("is-open");
+        document.body.classList.remove("swp-stream-drawer-open");
+
+        if (window.SwaggerActivityBar && typeof window.SwaggerActivityBar.setItemActive === "function") {
+            window.SwaggerActivityBar.setItemActive(CONFIG.PLUGIN_ID, false);
+        }
+    }
+
+    /**
+     * Toggles the sliding drawer open or closed.
+     * @param {boolean} [forceOpen]
+     */
+    function toggleStreamDrawer(forceOpen) {
+        createDrawerDOM();
+        const isOpen = typeof forceOpen === "boolean" ? forceOpen : !streamState.isOpen;
+        if (isOpen) {
+            openStreamDrawer();
+        } else {
+            closeStreamDrawer();
+        }
     }
 
     // =========================================================================
@@ -1673,11 +1685,7 @@
             order: CONFIG.ACTIVITY_BAR.ORDER,
             ariaLabel: t("activityBarTitle"),
             onClick: () => {
-                if (streamState.isOpen) {
-                    closeStreamDrawer();
-                } else {
-                    openStreamDrawer();
-                }
+                toggleStreamDrawer();
             }
         });
     }
@@ -1748,6 +1756,7 @@
     window.SwaggerStreamInspector = {
         openDrawer: openStreamDrawer,
         closeDrawer: closeStreamDrawer,
+        toggleDrawer: toggleStreamDrawer,
         startStream: startStream,
         stopStream: stopStream,
         getState: () => ({ ...streamState }),
