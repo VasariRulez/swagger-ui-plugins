@@ -27,7 +27,9 @@ An intelligent, zero-build-step plugin for **Swagger UI** that allows developers
 - **Configurable Auto-Execution**:
   - Optional toggle to automatically click "Execute" immediately after pre-filling the form.
 - **Activity Bar & Guide Integration**:
-  - Registers the 📥 button in `SwaggerActivityBar` with tooltips and badge.
+  - Registers the `>_` terminal button in `SwaggerActivityBar` with toggle active state support.
+  - Automatically suppresses standalone buttons when Activity Bar is active.
+  - When Activity Bar is absent, cleanly injects a fallback button into the scheme container next to Authorize.
   - Self-registers its complete manual in the Extensions Guide dialog.
 - **Light & Dark Theme Sync**:
   - Fully supports light and dark themes synchronized with Swagger UI and suite plugins.

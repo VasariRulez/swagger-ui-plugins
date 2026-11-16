@@ -320,6 +320,13 @@
                     i += 2;
                     continue;
                 }
+            } else if (token === "--oauth2-bearer") {
+                if (next) {
+                    authHeader = "Bearer " + next;
+                    headers["authorization"] = authHeader;
+                    i += 2;
+                    continue;
+                }
             } else if (
                 token === "-k" || token === "--insecure" ||
                 token === "-s" || token === "--silent" ||
@@ -401,7 +408,10 @@
         const colonIdx = headerString.indexOf(":");
         if (colonIdx !== -1) {
             const key = headerString.substring(0, colonIdx).trim().toLowerCase();
-            const val = headerString.substring(colonIdx + 1).trim();
+            let val = headerString.substring(colonIdx + 1).trim();
+            if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+                val = val.substring(1, val.length - 1).trim();
+            }
             targetHeaders[key] = val;
         }
     }
@@ -428,17 +438,27 @@
      * @returns {Object|null}
      */
     function getOpenApiSpec() {
-        if (!window.ui || typeof window.ui.getState !== "function") return null;
+        if (!window.ui) return null;
         try {
-            const specState = window.ui.getState().get("spec");
-            if (!specState) return null;
-            const jsonSpec = specState.get("json");
-            if (!jsonSpec) return null;
-            return typeof jsonSpec.toJS === "function" ? jsonSpec.toJS() : jsonSpec;
+            if (typeof window.ui.getState === "function") {
+                const specState = window.ui.getState().get("spec");
+                if (specState) {
+                    const jsonSpec = specState.get("json") || specState.get("spec");
+                    if (jsonSpec) {
+                        return typeof jsonSpec.toJS === "function" ? jsonSpec.toJS() : jsonSpec;
+                    }
+                }
+            }
+            if (window.ui.specSelectors && typeof window.ui.specSelectors.specJson === "function") {
+                const spec = window.ui.specSelectors.specJson();
+                if (spec) {
+                    return typeof spec.toJS === "function" ? spec.toJS() : spec;
+                }
+            }
         } catch (e) {
             console.warn("[SwaggerCurlImporter] Could not read OpenAPI spec from Redux state:", e);
-            return null;
         }
+        return null;
     }
 
     /**
@@ -827,42 +847,126 @@
     }
 
     /**
-     * Safely updates Swagger UI's internal Authorize state.
+     * Resolves security definitions from OpenAPI spec and Swagger UI Redux state.
+     * @returns {Object}
+     */
+    function getSecurityDefinitions() {
+        const definitions = {};
+        try {
+            const spec = getOpenApiSpec();
+            const fromSpec = spec?.components?.securitySchemes || spec?.securityDefinitions;
+            if (fromSpec && typeof fromSpec === "object") {
+                Object.assign(definitions, fromSpec);
+            }
+            if (window.ui?.specSelectors?.securityDefinitions) {
+                const sd = window.ui.specSelectors.securityDefinitions();
+                const jsSd = sd && typeof sd.toJS === "function" ? sd.toJS() : sd;
+                if (jsSd && typeof jsSd === "object") {
+                    Object.assign(definitions, jsSd);
+                }
+            }
+            if (window.ui?.authSelectors?.definitions) {
+                const ad = window.ui.authSelectors.definitions();
+                const jsAd = ad && typeof ad.toJS === "function" ? ad.toJS() : ad;
+                if (jsAd && typeof jsAd === "object") {
+                    Object.assign(definitions, jsAd);
+                }
+            }
+        } catch (e) {
+            console.warn("[SwaggerCurlImporter] Error reading security definitions:", e);
+        }
+        return definitions;
+    }
+
+    /**
+     * Safely updates Swagger UI's internal Authorize state and synchronized plugins.
      * @param {string} authHeaderValue
      */
     function trySyncAuthorization(authHeaderValue) {
         if (!authHeaderValue || !window.ui || typeof window.ui.authActions?.authorize !== "function") return;
         try {
-            const spec = getOpenApiSpec();
-            const secSchemes = spec?.components?.securitySchemes || spec?.securityDefinitions || {};
-
-            let token = authHeaderValue;
-            if (/^bearer\s+/i.test(authHeaderValue)) {
-                token = authHeaderValue.replace(/^bearer\s+/i, "").trim();
+            let raw = authHeaderValue.trim();
+            if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) {
+                raw = raw.substring(1, raw.length - 1).trim();
             }
 
-            const authPayload = {};
-            // If Bearer or API Key scheme exists in spec, bind to it
-            for (const [schemeKey, schemeData] of Object.entries(secSchemes)) {
-                const type = (schemeData.type || "").toLowerCase();
-                const scheme = (schemeData.scheme || "").toLowerCase();
+            let token = raw;
+            if (/^bearer\s+/i.test(raw)) {
+                token = raw.replace(/^bearer\s+/i, "").trim();
+            }
+            if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) {
+                token = token.substring(1, token.length - 1).trim();
+            }
 
-                if (type === "http" && scheme === "bearer") {
-                    authPayload[schemeKey] = { value: token };
-                    break;
-                } else if (type === "apikey") {
-                    authPayload[schemeKey] = { value: token };
-                    break;
+            if (!token) return;
+
+            const definitions = getSecurityDefinitions();
+            const authPayload = {};
+
+            // 1. Authorize all detected schemes in definitions (Bearer, ApiKey, JWT)
+            for (const [schemeKey, schemeData] of Object.entries(definitions)) {
+                const type = (schemeData?.type || "").toLowerCase();
+                const scheme = (schemeData?.scheme || "").toLowerCase();
+                const inWhere = (schemeData?.in || "").toLowerCase();
+                const paramName = (schemeData?.name || "").toLowerCase();
+
+                const isHttpBearer = (type === "http" && scheme === "bearer");
+                const isApiKey = (type === "apikey" && (inWhere === "header" || !inWhere));
+                const isLikelyToken = schemeKey.toLowerCase().includes("bearer") ||
+                                      schemeKey.toLowerCase().includes("token") ||
+                                      schemeKey.toLowerCase().includes("jwt") ||
+                                      paramName === "authorization";
+
+                if (isHttpBearer || isApiKey || isLikelyToken) {
+                    authPayload[schemeKey] = {
+                        name: schemeKey,
+                        schema: schemeData || {
+                            type: "http",
+                            scheme: "bearer",
+                            bearerFormat: "JWT"
+                        },
+                        value: isHttpBearer ? token : (raw.toLowerCase().startsWith("bearer ") ? raw : token)
+                    };
                 }
             }
 
-            // Fallback generic auth key if no specific scheme found
-            if (Object.keys(authPayload).length === 0) {
-                const firstScheme = Object.keys(secSchemes)[0] || "BearerAuth";
-                authPayload[firstScheme] = { value: token };
+            // 2. Guarantee standard schemes ("Bearer", "BearerAuth") and user-configured scheme are authorized
+            const appScheme = userConfig.appSchemeName ||
+                              window.SwaggerTokenInterceptorConfig?.appSchemeName ||
+                              window.SwaggerJwtInspectorConfig?.appSchemeName ||
+                              "Bearer";
+
+            const standardSchemes = [appScheme, "Bearer", "BearerAuth"];
+            standardSchemes.forEach((name) => {
+                if (!authPayload[name]) {
+                    authPayload[name] = {
+                        name: name,
+                        schema: {
+                            type: "http",
+                            scheme: "bearer",
+                            bearerFormat: "JWT"
+                        },
+                        value: token
+                    };
+                }
+            });
+
+            // 3. Dispatch to Swagger UI Redux store
+            window.ui.authActions.authorize(authPayload);
+
+            // 4. Optionally sync token to configured localStorage keys for companion plugins
+            const storageKey = window.SwaggerTokenInterceptorConfig?.storageKey;
+            if (storageKey) {
+                try { localStorage.setItem(storageKey, token); } catch {}
+            }
+            const fallbackKeys = window.SwaggerJwtInspectorConfig?.tokenStorageKeys;
+            if (Array.isArray(fallbackKeys)) {
+                fallbackKeys.forEach((k) => {
+                    try { localStorage.setItem(k, token); } catch {}
+                });
             }
 
-            window.ui.authActions.authorize(authPayload);
+            console.log("[SwaggerCurlImporter] Sincronizzazione autorizzazione completata:", Object.keys(authPayload));
         } catch (e) {
             console.warn("[SwaggerCurlImporter] Could not sync authorization:", e);
         }
@@ -1113,32 +1217,53 @@
                 }
             }
 
-            /* Topbar Button */
+            /* Fallback Import Button (Only when Activity Bar is absent) */
             #${CONFIG.ELEMENT_IDS.TOPBAR_BTN} {
                 display: inline-flex;
                 align-items: center;
-                gap: 5px;
-                padding: 4px 10px;
-                font-size: 12px;
+                gap: 6px;
+                padding: 6px 14px;
+                font-size: 13px;
                 font-weight: 600;
+                line-height: 1.2;
                 background: #0284c7;
                 color: #ffffff;
-                border: none;
+                border: 1px solid #0284c7;
                 border-radius: 4px;
                 cursor: pointer;
-                margin-left: 10px;
-                transition: background 0.15s;
+                margin: 4px 8px;
+                transition: background 0.15s, border-color 0.15s, transform 0.1s;
+                vertical-align: middle;
             }
             #${CONFIG.ELEMENT_IDS.TOPBAR_BTN}:hover {
                 background: #0369a1;
+                border-color: #0369a1;
+            }
+            #${CONFIG.ELEMENT_IDS.TOPBAR_BTN}:active {
+                transform: scale(0.97);
+            }
+            html.dark-mode #${CONFIG.ELEMENT_IDS.TOPBAR_BTN},
+            body.dark-mode #${CONFIG.ELEMENT_IDS.TOPBAR_BTN},
+            .dark-mode #${CONFIG.ELEMENT_IDS.TOPBAR_BTN},
+            [data-theme="dark"] #${CONFIG.ELEMENT_IDS.TOPBAR_BTN} {
+                background: #0284c7;
+                border-color: #38bdf8;
+                color: #ffffff;
             }
         `;
         document.head.appendChild(style);
     }
 
+    let lastSyncAuthChoice = CONFIG.DEFAULT_SYNC_AUTH;
+    let lastAutoExecChoice = CONFIG.DEFAULT_AUTO_EXECUTE;
+
     function openCurlImporterModal() {
-        closeCurlImporterModal();
+        if (document.getElementById(CONFIG.ELEMENT_IDS.MODAL)) return;
         injectStyles();
+
+        if (window.SwaggerActivityBar && typeof window.SwaggerActivityBar.setItemActive === "function") {
+            window.SwaggerActivityBar.setItemActive(CONFIG.PLUGIN_ID, true);
+        }
 
         const overlay = document.createElement("div");
         overlay.id = CONFIG.ELEMENT_IDS.MODAL;
@@ -1178,14 +1303,14 @@
 
                     <div style="display:flex;flex-direction:column;gap:8px;padding-top:4px;">
                         <label class="swp-curl-checkbox-label">
-                            <input type="checkbox" id="swp-curl-chk-sync-auth" ${CONFIG.DEFAULT_SYNC_AUTH ? "checked" : ""}>
+                            <input type="checkbox" id="swp-curl-chk-sync-auth" ${lastSyncAuthChoice ? "checked" : ""}>
                             <div>
                                 <strong style="color:var(--swp-curl-text);">${escapeHtml(t("syncAuthLabel"))}</strong>
                                 <div style="font-size:11px;color:var(--swp-curl-text-muted);">${escapeHtml(t("syncAuthHelp"))}</div>
                             </div>
                         </label>
                         <label class="swp-curl-checkbox-label">
-                            <input type="checkbox" id="swp-curl-chk-auto-exec" ${CONFIG.DEFAULT_AUTO_EXECUTE ? "checked" : ""}>
+                            <input type="checkbox" id="swp-curl-chk-auto-exec" ${lastAutoExecChoice ? "checked" : ""}>
                             <div>
                                 <strong style="color:var(--swp-curl-text);">${escapeHtml(t("autoExecuteLabel"))}</strong>
                                 <div style="font-size:11px;color:var(--swp-curl-text-muted);">${escapeHtml(t("autoExecuteHelp"))}</div>
@@ -1217,6 +1342,13 @@
 
         closeBtn?.addEventListener("click", closeCurlImporterModal);
         cancelBtn?.addEventListener("click", closeCurlImporterModal);
+
+        chkSyncAuth?.addEventListener("change", () => {
+            lastSyncAuthChoice = chkSyncAuth.checked;
+        });
+        chkAutoExec?.addEventListener("change", () => {
+            lastAutoExecChoice = chkAutoExec.checked;
+        });
 
         // Real-time parsed preview on input
         textarea?.addEventListener("input", () => {
@@ -1284,9 +1416,17 @@
                 return;
             }
 
+            const shouldSyncAuth = Boolean(chkSyncAuth?.checked);
+            const shouldAutoExec = Boolean(chkAutoExec?.checked);
+
+            // Synchronize authorization immediately with Swagger UI and companion plugins
+            if (shouldSyncAuth && parsed.authHeader) {
+                trySyncAuthorization(parsed.authHeader);
+            }
+
             const success = populateSwaggerOperation(matched, parsed, {
-                autoExecute: chkAutoExec?.checked,
-                syncAuth: chkSyncAuth?.checked
+                autoExecute: shouldAutoExec,
+                syncAuth: shouldSyncAuth
             });
 
             if (success) {
@@ -1316,6 +1456,17 @@
     function closeCurlImporterModal() {
         const modal = document.getElementById(CONFIG.ELEMENT_IDS.MODAL);
         if (modal) modal.remove();
+        if (window.SwaggerActivityBar && typeof window.SwaggerActivityBar.setItemActive === "function") {
+            window.SwaggerActivityBar.setItemActive(CONFIG.PLUGIN_ID, false);
+        }
+    }
+
+    function toggleCurlImporterModal() {
+        if (document.getElementById(CONFIG.ELEMENT_IDS.MODAL)) {
+            closeCurlImporterModal();
+        } else {
+            openCurlImporterModal();
+        }
     }
 
     // =========================================================================
@@ -1338,9 +1489,17 @@
                     return;
                 }
                 e.preventDefault();
-                openCurlImporterModal();
+                toggleCurlImporterModal();
             }
         });
+    }
+
+    function isActivityBarPresent() {
+        return Boolean(
+            (window.SwaggerActivityBar && typeof window.SwaggerActivityBar.registerItem === "function") ||
+            document.querySelector(".swp-activity-bar") ||
+            document.getElementById(`activity-btn-${CONFIG.PLUGIN_ID}`)
+        );
     }
 
     function registerActivityBarItem() {
@@ -1360,9 +1519,15 @@
             order: CONFIG.ACTIVITY_BAR.ORDER,
             ariaLabel: t("activityBarTitle"),
             onClick: () => {
-                openCurlImporterModal();
+                toggleCurlImporterModal();
             }
         });
+
+        // Clean up fallback button if Activity Bar is active
+        const fallbackBtn = document.getElementById(CONFIG.ELEMENT_IDS.TOPBAR_BTN);
+        if (fallbackBtn) fallbackBtn.remove();
+        const fallbackContainer = document.getElementById("swp-curl-fallback-container");
+        if (fallbackContainer) fallbackContainer.remove();
     }
 
     function registerExtensionsGuide() {
@@ -1401,12 +1566,19 @@
         }
     }
 
-    function tryInjectTopbarButton() {
+    function tryInjectFallbackButton() {
         if (!CONFIG.TOPBAR_BUTTON.ENABLED) return;
-        if (document.getElementById(CONFIG.ELEMENT_IDS.TOPBAR_BTN)) return;
 
-        const topbarWrapper = document.querySelector(".topbar .topbar-wrapper, .topbar");
-        if (!topbarWrapper) return;
+        // If Activity Bar is present, do NOT inject fallback button and clean up any previously injected instance
+        if (isActivityBarPresent()) {
+            const existingBtn = document.getElementById(CONFIG.ELEMENT_IDS.TOPBAR_BTN);
+            if (existingBtn) existingBtn.remove();
+            const existingContainer = document.getElementById("swp-curl-fallback-container");
+            if (existingContainer) existingContainer.remove();
+            return;
+        }
+
+        if (document.getElementById(CONFIG.ELEMENT_IDS.TOPBAR_BTN)) return;
 
         const btn = document.createElement("button");
         btn.id = CONFIG.ELEMENT_IDS.TOPBAR_BTN;
@@ -1418,9 +1590,39 @@
             </svg>
             <span>${escapeHtml(t("topbarBtnText"))}</span>
         `;
-        btn.addEventListener("click", openCurlImporterModal);
+        btn.addEventListener("click", toggleCurlImporterModal);
 
-        topbarWrapper.appendChild(btn);
+        // Preference 1: inside .scheme-container .schemes (aligned near Authorize and Search)
+        const schemesWrapper = document.querySelector(".swagger-ui .scheme-container .schemes");
+        if (schemesWrapper) {
+            const authWrapper = schemesWrapper.querySelector(".auth-wrapper");
+            if (authWrapper) {
+                schemesWrapper.insertBefore(btn, authWrapper);
+            } else {
+                schemesWrapper.appendChild(btn);
+            }
+            return;
+        }
+
+        // Preference 2: below .information-container
+        const infoContainer = document.querySelector(".swagger-ui .information-container");
+        if (infoContainer && infoContainer.parentNode) {
+            let container = document.getElementById("swp-curl-fallback-container");
+            if (!container) {
+                container = document.createElement("div");
+                container.id = "swp-curl-fallback-container";
+                container.style.cssText = "display:flex;justify-content:flex-end;max-width:1460px;margin:10px auto;padding:0 20px;";
+                infoContainer.parentNode.insertBefore(container, infoContainer.nextSibling);
+            }
+            container.appendChild(btn);
+            return;
+        }
+
+        // Preference 3: topbar
+        const topbarWrapper = document.querySelector(".topbar .topbar-wrapper, .topbar");
+        if (topbarWrapper) {
+            topbarWrapper.appendChild(btn);
+        }
     }
 
     // =========================================================================
@@ -1433,14 +1635,20 @@
         // Try registering with Activity Bar immediately and upon retry
         registerActivityBarItem();
         registerExtensionsGuide();
-        tryInjectTopbarButton();
+        tryInjectFallbackButton();
+
+        window.addEventListener("swagger-activity-bar:ready", () => {
+            registerActivityBarItem();
+            const fallbackBtn = document.getElementById(CONFIG.ELEMENT_IDS.TOPBAR_BTN);
+            if (fallbackBtn) fallbackBtn.remove();
+        });
 
         let attempts = 0;
         const interval = setInterval(() => {
             attempts++;
             registerActivityBarItem();
             registerExtensionsGuide();
-            tryInjectTopbarButton();
+            tryInjectFallbackButton();
             if (attempts > 12) clearInterval(interval);
         }, 800);
     }
@@ -1449,13 +1657,18 @@
     window.SwaggerCurlImporter = {
         openModal: openCurlImporterModal,
         closeModal: closeCurlImporterModal,
+        toggleModal: toggleCurlImporterModal,
         parseCurl: parseCurlCommand,
         matchOperation: matchOperation,
+        syncAuthorization: trySyncAuthorization,
         importCommand: (curlString, options) => {
             const parsed = parseCurlCommand(curlString);
             if (!parsed) return false;
             const matched = matchOperation(parsed);
             if (!matched) return false;
+            if (options?.syncAuth && parsed.authHeader) {
+                trySyncAuthorization(parsed.authHeader);
+            }
             return populateSwaggerOperation(matched, parsed, options);
         },
         version: CONFIG.PLUGIN_VERSION
