@@ -80,7 +80,7 @@
     const I18N = {
         en: {
             activityBarTitle: "Import cURL (Ctrl+Shift+I)",
-            topbarBtnText: "📥 Import cURL",
+            topbarBtnText: "Import cURL",
             modalTitle: "Import cURL Command",
             modalSubtitle: "Paste a cURL command from DevTools, Postman, or terminal to auto-navigate and fill Swagger UI",
             textareaPlaceholder: "curl -X POST \"https://api.example.com/v1/orders/1024\" \\\n  -H \"Authorization: Bearer eyJhbGciOi...\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"quantity\": 2, \"status\": \"NEW\"}'",
@@ -106,7 +106,7 @@
         },
         it: {
             activityBarTitle: "Importa cURL (Ctrl+Shift+I)",
-            topbarBtnText: "📥 Importa cURL",
+            topbarBtnText: "Importa cURL",
             modalTitle: "Importa Comando cURL",
             modalSubtitle: "Incolla un comando cURL da DevTools, Postman o terminale per aprire e precompilare l'endpoint in Swagger UI",
             textareaPlaceholder: "curl -X POST \"https://api.example.com/v1/orders/1024\" \\\n  -H \"Authorization: Bearer eyJhbGciOi...\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"quantity\": 2, \"status\": \"NEW\"}'",
@@ -1021,8 +1021,11 @@
         overlay.innerHTML = `
             <div class="swp-curl-window">
                 <div class="swp-curl-header">
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <span style="font-size:18px;">📥</span>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--swp-curl-primary);">
+                            <polyline points="4 17 10 11 4 5"></polyline>
+                            <line x1="12" y1="19" x2="20" y2="19"></line>
+                        </svg>
                         <div>
                             <strong style="font-size:14px;color:var(--swp-curl-text);">${escapeHtml(t("modalTitle"))}</strong>
                             <div style="font-size:11px;color:var(--swp-curl-text-muted);">${escapeHtml(t("modalSubtitle"))}</div>
@@ -1209,7 +1212,12 @@
         window.SwaggerActivityBar.registerItem({
             id: CONFIG.PLUGIN_ID,
             title: t("activityBarTitle"),
-            iconHtml: `<span style="font-size:16px;">📥</span>`,
+            iconHtml: `
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:block;">
+                    <polyline points="4 17 10 11 4 5"></polyline>
+                    <line x1="12" y1="19" x2="20" y2="19"></line>
+                </svg>
+            `,
             section: "main",
             order: CONFIG.ACTIVITY_BAR.ORDER,
             ariaLabel: t("activityBarTitle"),
@@ -1229,7 +1237,12 @@
                 name: CONFIG.PLUGIN_NAME,
                 version: CONFIG.PLUGIN_VERSION,
                 description: t("guideDescription"),
-                iconHtml: "📥",
+                iconHtml: `
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="4 17 10 11 4 5"></polyline>
+                        <line x1="12" y1="19" x2="20" y2="19"></line>
+                    </svg>
+                `,
                 shortcuts: [
                     { key: "Ctrl + Shift + I", desc: t("activityBarTitle") },
                     { key: "Ctrl + Enter", desc: "Submit cURL command in modal" },
@@ -1238,7 +1251,7 @@
                 manual: `
 ### ${CONFIG.PLUGIN_NAME} — Manual
 
-1. **Open Modal**: Click the 📥 icon in the Activity Bar or press \`Ctrl+Shift+I\` (or \`Cmd+Shift+I\` on macOS).
+1. **Open Modal**: Click the Terminal [ >_ ] icon in the Activity Bar or press \`Ctrl+Shift+I\` (or \`Cmd+Shift+I\` on macOS).
 2. **Paste cURL**: Paste any command copied from browser DevTools, Postman, or terminal.
 3. **Review Preview**: The parser previews detected HTTP Method, Path, parameter count, and masks authorization tokens.
 4. **Options**:
@@ -1260,7 +1273,13 @@
         const btn = document.createElement("button");
         btn.id = CONFIG.ELEMENT_IDS.TOPBAR_BTN;
         btn.type = "button";
-        btn.innerHTML = `<span>📥</span> ${escapeHtml(t("topbarBtnText"))}`;
+        btn.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:4px;">
+                <polyline points="4 17 10 11 4 5"></polyline>
+                <line x1="12" y1="19" x2="20" y2="19"></line>
+            </svg>
+            <span>${escapeHtml(t("topbarBtnText"))}</span>
+        `;
         btn.addEventListener("click", openCurlImporterModal);
 
         topbarWrapper.appendChild(btn);

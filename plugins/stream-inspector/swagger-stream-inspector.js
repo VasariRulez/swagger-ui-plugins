@@ -97,7 +97,7 @@
     const I18N = {
         en: {
             activityBarTitle: "Stream Inspector (SSE / NDJSON)",
-            btnStreamLive: "⚡ Stream Live",
+            btnStreamLive: "Stream Live",
             drawerTitle: "Live Stream Inspector",
             statusIdle: "Idle",
             statusConnecting: "Connecting...",
@@ -126,7 +126,7 @@
         },
         it: {
             activityBarTitle: "Stream Inspector (SSE / NDJSON)",
-            btnStreamLive: "⚡ Stream Live",
+            btnStreamLive: "Stream Live",
             drawerTitle: "Live Stream Inspector",
             statusIdle: "Inattivo",
             statusConnecting: "Connessione...",
@@ -825,7 +825,10 @@
         drawer.innerHTML = `
             <div class="swp-si-header">
                 <div style="display:flex;align-items:center;gap:10px;">
-                    <span style="font-size:18px;">⚡</span>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--swp-si-primary);">
+                        <rect x="2" y="5" width="20" height="14" rx="3.5"></rect>
+                        <text x="12" y="15.2" text-anchor="middle" font-size="8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="800" fill="currentColor" stroke="none" letter-spacing="0.5">SSE</text>
+                    </svg>
                     <div>
                         <div style="display:flex;align-items:center;gap:8px;">
                             <strong style="font-size:13px;color:var(--swp-si-text);">${escapeHtml(t("drawerTitle"))}</strong>
@@ -866,7 +869,12 @@
 
             <div class="swp-si-feed" id="swp-stream-feed">
                 <div id="swp-stream-empty" style="text-align:center;padding:40px 20px;color:var(--swp-si-text-muted);">
-                    <div style="font-size:24px;margin-bottom:8px;">⚡</div>
+                    <div style="display:flex;justify-content:center;margin-bottom:10px;">
+                        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="color:var(--swp-si-text-muted);">
+                            <rect x="2" y="5" width="20" height="14" rx="3.5"></rect>
+                            <text x="12" y="15.2" text-anchor="middle" font-size="8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="800" fill="currentColor" stroke="none" letter-spacing="0.5">SSE</text>
+                        </svg>
+                    </div>
                     <strong style="font-size:13px;display:block;margin-bottom:4px;color:var(--swp-si-text);">${escapeHtml(t("emptyFeedTitle"))}</strong>
                     <div style="font-size:11px;">${escapeHtml(t("emptyFeedDesc"))}</div>
                 </div>
@@ -948,7 +956,12 @@
         if (!feed) return;
         feed.innerHTML = `
             <div id="swp-stream-empty" style="text-align:center;padding:40px 20px;color:var(--swp-si-text-muted);">
-                <div style="font-size:24px;margin-bottom:8px;">⚡</div>
+                <div style="display:flex;justify-content:center;margin-bottom:10px;">
+                    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="color:var(--swp-si-text-muted);">
+                        <rect x="2" y="5" width="20" height="14" rx="3.5"></rect>
+                        <text x="12" y="15.2" text-anchor="middle" font-size="8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="800" fill="currentColor" stroke="none" letter-spacing="0.5">SSE</text>
+                    </svg>
+                </div>
                 <strong style="font-size:13px;display:block;margin-bottom:4px;color:var(--swp-si-text);">${escapeHtml(t("emptyFeedTitle"))}</strong>
                 <div style="font-size:11px;">${escapeHtml(t("emptyFeedDesc"))}</div>
             </div>
@@ -1084,7 +1097,12 @@
             const btn = document.createElement("button");
             btn.type = "button";
             btn.className = "swp-si-trigger-btn";
-            btn.innerHTML = `<span>⚡</span> <span>${escapeHtml(t("btnStreamLive"))}</span>`;
+            btn.innerHTML = `
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:3px;">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                </svg>
+                <span>${escapeHtml(t("btnStreamLive"))}</span>
+            `;
 
             btn.addEventListener("click", (e) => {
                 e.stopPropagation();
@@ -1204,7 +1222,12 @@
         window.SwaggerActivityBar.registerItem({
             id: CONFIG.PLUGIN_ID,
             title: t("activityBarTitle"),
-            iconHtml: `<span style="font-size:16px;">⚡</span>`,
+            iconHtml: `
+                <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:block;">
+                    <rect x="2" y="5" width="20" height="14" rx="3.5"></rect>
+                    <text x="12" y="15.2" text-anchor="middle" font-size="8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="800" fill="currentColor" stroke="none" letter-spacing="0.5">SSE</text>
+                </svg>
+            `,
             section: "main",
             order: CONFIG.ACTIVITY_BAR.ORDER,
             ariaLabel: t("activityBarTitle"),
@@ -1228,15 +1251,20 @@
                 name: CONFIG.PLUGIN_NAME,
                 version: CONFIG.PLUGIN_VERSION,
                 description: t("guideDescription"),
-                iconHtml: "⚡",
+                iconHtml: `
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="5" width="20" height="14" rx="3.5"></rect>
+                        <text x="12" y="15.2" text-anchor="middle" font-size="8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="800" fill="currentColor" stroke="none" letter-spacing="0.5">SSE</text>
+                    </svg>
+                `,
                 shortcuts: [
                     { key: "Esc", desc: "Close stream drawer" }
                 ],
                 manual: `
 ### ${CONFIG.PLUGIN_NAME} — Manual
 
-1. **Auto-Detection**: Streaming endpoints (\`text/event-stream\`, \`application/x-ndjson\`) automatically display a **'⚡ Stream Live'** button.
-2. **Launch Stream**: Clicking '⚡ Stream Live' extracts current form parameters and body, opens the sliding drawer, and connects.
+1. **Auto-Detection**: Streaming endpoints (\`text/event-stream\`, \`application/x-ndjson\`) automatically display a **'Stream Live'** button.
+2. **Launch Stream**: Clicking 'Stream Live' extracts current form parameters and body, opens the sliding drawer, and connects.
 3. **Live Diagnostics**:
    - Event count, total bytes, stream duration, throughput, and packet latency delta.
    - Event filtering and real-time payload search.
