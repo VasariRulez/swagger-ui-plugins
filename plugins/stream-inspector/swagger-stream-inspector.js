@@ -44,7 +44,9 @@
         },
 
         /** Drawer & Buffer Settings */
-        DRAWER_WIDTH_PX: typeof userConfig.drawerWidthPx === "number" ? userConfig.drawerWidthPx : 580,
+        DRAWER_WIDTH_PX: typeof userConfig.drawerWidthPx === "number" 
+            ? userConfig.drawerWidthPx 
+            : (typeof userConfig.drawerWidth === "number" ? userConfig.drawerWidth : 480),
         MAX_STORED_EVENTS: typeof userConfig.maxStoredEvents === "number" ? userConfig.maxStoredEvents : 500,
         AUTO_SCROLL_DEFAULT: userConfig.autoScrollDefault !== false,
         INJECT_BUTTON: userConfig.injectButtonInEndpoints !== false,

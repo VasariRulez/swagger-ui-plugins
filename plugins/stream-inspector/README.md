@@ -7,7 +7,7 @@ A dedicated, real-time client and diagnostics drawer for **Server-Sent Events (`
 ## 🌟 Key Features
 
 - **Real-Time Sliding Drawer (Side-by-Side Workflow)**:
-  - Slides in from the right edge (`#swp-stream-inspector-drawer`) and dynamically offsets Swagger UI content (`padding-right: 580px`).
+  - Slides in from the right edge (`#swp-stream-inspector-drawer`) and dynamically offsets Swagger UI content (`padding-right: 480px`).
   - Zero modal backdrops: leaves the page completely interactive and clickable (invoke REST endpoints, run Try it out, inspect payloads) while observing live streaming events simultaneously.
 - **W3C Server-Sent Events & NDJSON Support**:
   - Line-by-line streaming state machine handling `event:`, `data:`, `id:`, `retry:`, and comment/heartbeat lines (`: ping`).
@@ -73,7 +73,7 @@ window.SwaggerStreamInspectorConfig = {
     locale: "auto",
 
     // Drawer dimensions and buffer limits
-    drawerWidthPx: 580,             // Drawer width in pixels
+    drawerWidthPx: 480,             // Drawer width in pixels (matches SignalR and Network History)
     maxStoredEvents: 500,           // Maximum event cards kept in memory
     autoScrollDefault: true,        // Auto-scroll to latest event
 
