@@ -64,6 +64,9 @@
             "application/stream+json"
         ],
 
+        /** Preconfigured or fallback streaming endpoints */
+        ENDPOINTS: Array.isArray(userConfig.endpoints) ? userConfig.endpoints : [],
+
         /** Language Setting */
         LOCALE: userConfig.locale || "auto"
     };
@@ -76,6 +79,7 @@
         method: "GET",
         headers: {},
         body: "",
+        useAuth: true,
         abortController: null,
         reader: null,
         events: [],
@@ -122,6 +126,13 @@
             exportTitle: "Export stream events",
             exportJson: "Download JSON",
             exportText: "Download Text Log",
+            connEndpointLabel: "Streaming Endpoint:",
+            selectEndpointPlaceholder: "-- Select Swagger Endpoint or type below --",
+            streamingEndpointsGroup: "⚡ Detected Streaming Endpoints",
+            otherEndpointsGroup: "All Swagger Endpoints",
+            autoDetectTooltip: "Rule for automatic listing: Endpoints appear under 'Detected Streaming' if their OpenAPI specification declares a response Content-Type such as 'text/event-stream' or 'application/x-ndjson' (in 'produces' or 'responses.content'), or matches window.SwaggerStreamInspectorConfig.endpoints. You can also select any other endpoint from the list or type any custom URL/path directly below.",
+            useBearerAuth: "Bearer Auth",
+            requestBodyLabel: "Request Body (JSON / Text):",
             guideDescription: "Inspects and tests Server-Sent Events (SSE), NDJSON, and chunked transfer endpoints in real time with packet latency, filtering, and export."
         },
         it: {
@@ -151,6 +162,13 @@
             exportTitle: "Esporta eventi dello stream",
             exportJson: "Scarica JSON",
             exportText: "Scarica Log Testuale",
+            connEndpointLabel: "Endpoint di Streaming:",
+            selectEndpointPlaceholder: "-- Seleziona un Endpoint Swagger o digita sotto --",
+            streamingEndpointsGroup: "⚡ Endpoint di Streaming Rilevati",
+            otherEndpointsGroup: "Tutti gli Endpoint Swagger",
+            autoDetectTooltip: "Regola per la lista automatica: gli endpoint appaiono tra gli 'Endpoint di Streaming Rilevati' se nella specifica OpenAPI dichiarano un Content-Type di risposta come 'text/event-stream' o 'application/x-ndjson' (in 'produces' o 'responses.content'), oppure se configurati in window.SwaggerStreamInspectorConfig.endpoints. Puoi comunque selezionare qualsiasi altro endpoint dall'elenco o digitare un URL/percorso personalizzato sotto.",
+            useBearerAuth: "Bearer Auth",
+            requestBodyLabel: "Body della Richiesta (JSON / Testo):",
             guideDescription: "Ispeziona e testa in tempo reale endpoint Server-Sent Events (SSE), NDJSON e stream chunked con metriche di latenza, filtri ed export."
         }
     };
@@ -228,14 +246,19 @@
     async function startStream(targetUrl, method = "GET", headers = {}, body = "") {
         stopStream();
 
-        streamState.url = targetUrl || streamState.url;
+        let resolvedUrl = targetUrl || streamState.url;
+        try {
+            resolvedUrl = new URL(resolvedUrl, window.location.href).href;
+        } catch {}
+
+        streamState.url = resolvedUrl;
         streamState.method = (method || "GET").toUpperCase();
         streamState.headers = { ...headers };
         streamState.body = body || "";
 
-        // Inherit Bearer token if not explicitly passed
+        // Inherit Bearer token if not explicitly passed and auth is enabled
         const hasAuth = Object.keys(streamState.headers).some(k => k.toLowerCase() === "authorization");
-        if (!hasAuth) {
+        if (!hasAuth && streamState.useAuth !== false) {
             const bearer = getActiveSwaggerBearerToken();
             if (bearer) {
                 streamState.headers["Authorization"] = bearer.startsWith("Bearer ") ? bearer : `Bearer ${bearer}`;
@@ -788,6 +811,50 @@
                 border-color: var(--swp-si-primary);
             }
 
+            .swp-si-conn-section {
+                padding: 10px 14px;
+                border-bottom: 1px solid var(--swp-si-card-border);
+                background: var(--swp-si-header-bg);
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                flex-shrink: 0;
+            }
+
+            .swp-si-select {
+                padding: 5px 8px;
+                border-radius: 4px;
+                border: 1px solid var(--swp-si-border);
+                background: var(--swp-si-bg);
+                color: var(--swp-si-text);
+                font-size: 11px;
+                outline: none;
+                cursor: pointer;
+            }
+            .swp-si-select:focus {
+                border-color: var(--swp-si-primary);
+            }
+
+            .swp-si-help-tip {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 15px;
+                height: 15px;
+                border-radius: 50%;
+                background: var(--swp-si-border);
+                color: var(--swp-si-text);
+                font-size: 10px;
+                font-weight: 700;
+                cursor: help;
+                transition: background 0.15s, color 0.15s;
+                user-select: none;
+            }
+            .swp-si-help-tip:hover {
+                background: var(--swp-si-primary);
+                color: #ffffff;
+            }
+
             /* Endpoint Button */
             .swp-si-trigger-btn {
                 display: inline-flex;
@@ -845,6 +912,38 @@
                 <button type="button" class="swp-si-btn" id="swp-stream-btn-close" style="padding:4px 8px;font-size:14px;" aria-label="Close">✕</button>
             </div>
 
+            <!-- Connection & Endpoint Configuration Bar -->
+            <div class="swp-si-conn-section">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <label style="font-size:11px;font-weight:700;color:var(--swp-si-text);text-transform:uppercase;">
+                            ${escapeHtml(t("connEndpointLabel"))}
+                        </label>
+                        <span class="swp-si-help-tip" title="${escapeHtml(t("autoDetectTooltip"))}">?</span>
+                    </div>
+                    <label style="font-size:11px;display:flex;align-items:center;gap:4px;cursor:pointer;color:var(--swp-si-text-muted);">
+                        <input type="checkbox" id="swp-stream-chk-auth" ${streamState.useAuth ? "checked" : ""}>
+                        <span>${escapeHtml(t("useBearerAuth"))}</span>
+                    </label>
+                </div>
+                <select id="swp-stream-endpoint-select" class="swp-si-select">
+                    <option value="">${escapeHtml(t("selectEndpointPlaceholder"))}</option>
+                </select>
+                <div style="display:flex;gap:6px;align-items:center;">
+                    <select id="swp-stream-method-select" class="swp-si-select" style="width:84px;flex-shrink:0;font-weight:700;">
+                        <option value="GET">GET</option>
+                        <option value="POST">POST</option>
+                        <option value="PUT">PUT</option>
+                        <option value="DELETE">DELETE</option>
+                    </select>
+                    <input type="text" id="swp-stream-url-input" class="swp-si-input" placeholder="/api/..." style="flex:1;font-family:monospace;font-size:11px;" value="${escapeHtml(streamState.url)}">
+                </div>
+                <div id="swp-stream-body-wrap" style="display:none;flex-direction:column;gap:3px;margin-top:2px;">
+                    <label style="font-size:10px;font-weight:600;color:var(--swp-si-text-muted);">${escapeHtml(t("requestBodyLabel"))}</label>
+                    <textarea id="swp-stream-body-input" class="swp-si-input" style="height:55px;font-family:monospace;font-size:11px;resize:vertical;" placeholder="{ ... }"></textarea>
+                </div>
+            </div>
+
             <div class="swp-si-toolbar">
                 <div style="display:flex;align-items:center;gap:6px;">
                     <button type="button" class="swp-si-btn swp-si-btn-primary" id="swp-stream-btn-connect">▶ ${escapeHtml(t("btnConnect"))}</button>
@@ -888,14 +987,71 @@
 
         document.body.appendChild(drawer);
 
+        const endpointSelect = drawer.querySelector("#swp-stream-endpoint-select");
+        const methodSelect = drawer.querySelector("#swp-stream-method-select");
+        const urlInput = drawer.querySelector("#swp-stream-url-input");
+        const bodyInput = drawer.querySelector("#swp-stream-body-input");
+        const bodyWrap = drawer.querySelector("#swp-stream-body-wrap");
+        const chkAuth = drawer.querySelector("#swp-stream-chk-auth");
+
+        endpointSelect?.addEventListener("change", () => {
+            const selectedOpt = endpointSelect.options[endpointSelect.selectedIndex];
+            const chosenPath = endpointSelect.value;
+            const chosenMethod = selectedOpt?.getAttribute("data-method") || "GET";
+
+            if (chosenPath) {
+                urlInput.value = chosenPath;
+                methodSelect.value = chosenMethod;
+                streamState.url = chosenPath;
+                streamState.method = chosenMethod;
+                const isBodyMethod = chosenMethod === "POST" || chosenMethod === "PUT";
+                if (bodyWrap) bodyWrap.style.display = isBodyMethod ? "flex" : "none";
+                const urlDisplay = document.getElementById("swp-stream-url-display");
+                if (urlDisplay) urlDisplay.textContent = `${chosenMethod} ${chosenPath}`;
+            }
+        });
+
+        methodSelect?.addEventListener("change", () => {
+            const m = methodSelect.value;
+            streamState.method = m;
+            const isBodyMethod = m === "POST" || m === "PUT";
+            if (bodyWrap) bodyWrap.style.display = isBodyMethod ? "flex" : "none";
+            const urlDisplay = document.getElementById("swp-stream-url-display");
+            if (urlDisplay && streamState.url) urlDisplay.textContent = `${m} ${streamState.url}`;
+        });
+
+        urlInput?.addEventListener("input", () => {
+            streamState.url = urlInput.value.trim();
+            const urlDisplay = document.getElementById("swp-stream-url-display");
+            if (urlDisplay) urlDisplay.textContent = `${streamState.method} ${streamState.url}`;
+        });
+
+        chkAuth?.addEventListener("change", () => {
+            streamState.useAuth = chkAuth.checked;
+        });
+
         // Bind events
         drawer.querySelector("#swp-stream-btn-close")?.addEventListener("click", closeStreamDrawer);
         drawer.querySelector("#swp-stream-btn-connect")?.addEventListener("click", () => {
-            if (streamState.url) startStream(streamState.url, streamState.method, streamState.headers, streamState.body);
+            const targetUrl = urlInput?.value.trim() || streamState.url;
+            const targetMethod = methodSelect?.value || streamState.method;
+            const targetBody = bodyInput?.value || streamState.body;
+            if (chkAuth) streamState.useAuth = chkAuth.checked;
+
+            if (targetUrl) {
+                startStream(targetUrl, targetMethod, streamState.headers, targetBody);
+            }
         });
         drawer.querySelector("#swp-stream-btn-stop")?.addEventListener("click", stopStream);
         drawer.querySelector("#swp-stream-btn-replay")?.addEventListener("click", () => {
-            if (streamState.url) startStream(streamState.url, streamState.method, streamState.headers, streamState.body);
+            const targetUrl = urlInput?.value.trim() || streamState.url;
+            const targetMethod = methodSelect?.value || streamState.method;
+            const targetBody = bodyInput?.value || streamState.body;
+            if (chkAuth) streamState.useAuth = chkAuth.checked;
+
+            if (targetUrl) {
+                startStream(targetUrl, targetMethod, streamState.headers, targetBody);
+            }
         });
         drawer.querySelector("#swp-stream-btn-clear")?.addEventListener("click", () => {
             resetMetrics();
@@ -917,6 +1073,94 @@
         });
     }
 
+    function populateEndpointDropdown() {
+        const select = document.getElementById("swp-stream-endpoint-select");
+        if (!select) return;
+
+        const spec = getOpenApiSpec();
+        const streamingOps = [];
+        const otherOps = [];
+        const configuredPaths = new Set(CONFIG.ENDPOINTS);
+
+        if (spec && spec.paths) {
+            for (const [path, pathItem] of Object.entries(spec.paths)) {
+                if (!pathItem || typeof pathItem !== "object") continue;
+                for (const [method, op] of Object.entries(pathItem)) {
+                    if (!op || typeof op !== "object" || method === "parameters") continue;
+                    const m = method.toUpperCase();
+                    let isStreaming = configuredPaths.has(path) || configuredPaths.has(`${m} ${path}`);
+
+                    if (!isStreaming) {
+                        const produces = op.produces || spec.produces || [];
+                        for (const mime of CONFIG.STREAM_MIME_TYPES) {
+                            if (produces.includes(mime)) {
+                                isStreaming = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!isStreaming && op.responses) {
+                        for (const res of Object.values(op.responses)) {
+                            if (res && res.content) {
+                                for (const mime of CONFIG.STREAM_MIME_TYPES) {
+                                    if (res.content[mime]) {
+                                        isStreaming = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    const item = { method: m, path: path, summary: op.summary || "" };
+                    if (isStreaming) {
+                        streamingOps.push(item);
+                    } else {
+                        otherOps.push(item);
+                    }
+                }
+            }
+        } else {
+            const opblocks = document.querySelectorAll(".swagger-ui .opblock, .opblock");
+            opblocks.forEach(block => {
+                const methodEl = block.querySelector(".opblock-summary-method");
+                const pathEl = block.querySelector(".opblock-summary-path");
+                if (!methodEl || !pathEl) return;
+                const m = methodEl.textContent.trim().toUpperCase();
+                const p = cleanZeroWidth(pathEl.getAttribute("data-path") || pathEl.textContent);
+                const isStreaming = checkIfOpblockIsStreaming(block) || configuredPaths.has(p);
+                const item = { method: m, path: p, summary: "" };
+                if (isStreaming) {
+                    streamingOps.push(item);
+                } else {
+                    otherOps.push(item);
+                }
+            });
+        }
+
+        let html = `<option value="">${escapeHtml(t("selectEndpointPlaceholder"))}</option>`;
+
+        if (streamingOps.length > 0) {
+            html += `<optgroup label="${escapeHtml(t("streamingEndpointsGroup"))}">`;
+            streamingOps.forEach(op => {
+                const label = `${op.method} ${op.path}${op.summary ? " — " + op.summary : ""}`;
+                html += `<option value="${escapeHtml(op.path)}" data-method="${op.method}">${escapeHtml(label)}</option>`;
+            });
+            html += `</optgroup>`;
+        }
+
+        if (otherOps.length > 0) {
+            html += `<optgroup label="${escapeHtml(t("otherEndpointsGroup"))}">`;
+            otherOps.forEach(op => {
+                const label = `${op.method} ${op.path}${op.summary ? " — " + op.summary : ""}`;
+                html += `<option value="${escapeHtml(op.path)}" data-method="${op.method}">${escapeHtml(label)}</option>`;
+            });
+            html += `</optgroup>`;
+        }
+
+        select.innerHTML = html;
+    }
+
     function openStreamDrawer(options = {}) {
         createDrawerDOM();
         streamState.isOpen = true;
@@ -928,13 +1172,30 @@
             streamState.body = options.body || "";
         }
 
+        populateEndpointDropdown();
+
         const drawer = document.getElementById(CONFIG.ELEMENT_IDS.DRAWER);
         const backdrop = document.getElementById(CONFIG.ELEMENT_IDS.BACKDROP);
         const urlDisplay = document.getElementById("swp-stream-url-display");
+        const urlInput = document.getElementById("swp-stream-url-input");
+        const methodSelect = document.getElementById("swp-stream-method-select");
+        const bodyInput = document.getElementById("swp-stream-body-input");
+        const bodyWrap = document.getElementById("swp-stream-body-wrap");
 
         if (urlDisplay && streamState.url) {
             urlDisplay.textContent = `${streamState.method} ${streamState.url}`;
             urlDisplay.title = streamState.url;
+        }
+        if (urlInput && streamState.url) {
+            urlInput.value = streamState.url;
+        }
+        if (methodSelect && streamState.method) {
+            methodSelect.value = streamState.method;
+            const isBodyMethod = streamState.method === "POST" || streamState.method === "PUT";
+            if (bodyWrap) bodyWrap.style.display = isBodyMethod ? "flex" : "none";
+        }
+        if (bodyInput && options.body) {
+            bodyInput.value = options.body;
         }
 
         drawer?.classList.add("is-open");

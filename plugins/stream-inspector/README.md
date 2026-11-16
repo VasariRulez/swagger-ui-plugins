@@ -19,8 +19,13 @@ A dedicated, real-time client and diagnostics drawer for **Server-Sent Events (`
   - Automatically inherits the active Swagger UI Bearer authorization token.
 - **Automatic Endpoint Detection & Injected Button**:
   - Automatically detects endpoints declaring streaming content types (`text/event-stream`, `application/x-ndjson`).
-  - Injects a **"⚡ Stream Live"** button inside the `.opblock` summary.
+  - Injects a **"Stream Live"** button inside the `.opblock` summary.
   - Clicks automatically extract form parameter values, body text, and open the stream drawer.
+- **Interactive Connection Bar & Quick Endpoint Selector**:
+  - Top connection bar with editable URL input and HTTP method selector (`GET`, `POST` with request body, `PUT`, `DELETE`).
+  - Dropdown listing all Swagger endpoints categorized into *"⚡ Detected Streaming"* and *"All Swagger Endpoints"*.
+  - Explanatory tooltip `(?)` detailing the exact OpenAPI rule used for automatic listing.
+  - Preconfigure fallback streaming paths via `window.SwaggerStreamInspectorConfig.endpoints`.
 - **Live Diagnostics & Metrics**:
   - Total events count, total bytes received, stream duration counter (`mm:ss`), throughput frequency (`events/s`), and packet latency delta (`+120ms`).
 - **Developer Tools**:
@@ -81,6 +86,12 @@ window.SwaggerStreamInspectorConfig = {
         "application/x-ndjson",
         "application/jsonl",
         "application/stream+json"
+    ],
+
+    // Preconfigured or fallback streaming endpoints (useful if not declared in OpenAPI)
+    endpoints: [
+        "/api/v1/notifications/stream",
+        "/events/live"
     ],
 
     // Activity Bar integration
