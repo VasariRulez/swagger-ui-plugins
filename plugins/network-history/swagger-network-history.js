@@ -571,18 +571,30 @@
                 const response = await originalFetch.apply(this, args);
                 const durationMs = Math.round(performance.now() - startTime);
 
-                // Non-destructive clone of response to read body without consuming stream
-                const responseClone = response.clone();
+                // Detect real-time streaming responses (SSE, NDJSON, etc.)
+                // Streaming responses MUST NOT be awaited with responseClone.text() because
+                // doing so blocks the fetch Promise until the stream is closed!
+                const contentType = (response.headers.get("content-type") || "").toLowerCase();
+                const isStream = contentType.includes("text/event-stream") ||
+                                 contentType.includes("ndjson") ||
+                                 contentType.includes("stream+json");
+
                 let responseBodyText = "";
                 let sizeBytes = 0;
 
-                try {
-                    responseBodyText = await responseClone.text();
-                    // Calcolo dimensione effettiva del payload
-                    sizeBytes = new Blob([responseBodyText]).size;
-                } catch {
-                    // Risposta non leggibile come testo (es. stream binario)
-                    responseBodyText = "[Contenuto binario o non testuale]";
+                if (isStream) {
+                    responseBodyText = `[Live Stream: ${contentType.split(";")[0] || "event-stream"}]`;
+                } else {
+                    // Non-destructive clone of response to read body without consuming stream
+                    const responseClone = response.clone();
+                    try {
+                        responseBodyText = await responseClone.text();
+                        // Calcolo dimensione effettiva del payload
+                        sizeBytes = new Blob([responseBodyText]).size;
+                    } catch {
+                        // Risposta non leggibile come testo (es. stream binario)
+                        responseBodyText = "[Contenuto binario o non testuale]";
+                    }
                 }
 
                 // Estrazione header di risposta
