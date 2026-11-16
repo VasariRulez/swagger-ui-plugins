@@ -507,6 +507,8 @@
                             candidatePath: candidate,
                             method: curlMethod,
                             operation: op,
+                            tag: (op && Array.isArray(op.tags) && op.tags[0]) || "",
+                            operationId: (op && op.operationId) || "",
                             pathParams: extractedPathParams
                         };
                     }
@@ -515,14 +517,14 @@
         }
 
         // 2. DOM-based Fallback Matching (if spec is unavailable)
-        const opblocks = document.querySelectorAll(".opblock");
+        const opblocks = document.querySelectorAll(".swagger-ui .opblock, .opblock");
         for (const opblock of opblocks) {
             const methodEl = opblock.querySelector(".opblock-summary-method");
             const pathEl = opblock.querySelector(".opblock-summary-path");
             if (!methodEl || !pathEl) continue;
 
             const domMethod = methodEl.textContent.trim().toLowerCase();
-            const domPath = pathEl.getAttribute("data-path") || pathEl.textContent.trim();
+            const domPath = cleanZeroWidth(pathEl.getAttribute("data-path") || pathEl.textContent);
 
             if (domMethod === curlMethod) {
                 const { regex, paramNames } = pathToRegex(domPath);
@@ -533,11 +535,16 @@
                         extractedPathParams[name] = decodeURIComponent(match[idx + 1] || "");
                     });
 
+                    const tagHeader = opblock.closest(".opblock-tag-section")?.querySelector(".opblock-tag");
+                    const domTag = tagHeader ? cleanZeroWidth(tagHeader.getAttribute("data-tag") || tagHeader.textContent) : "";
+
                     return {
                         specPath: domPath,
                         candidatePath: domPath,
                         method: domMethod,
                         operation: null,
+                        tag: domTag,
+                        operationId: "",
                         pathParams: extractedPathParams
                     };
                 }
@@ -550,6 +557,107 @@
     // =========================================================================
     // 5. DOM INTERACTION & PRE-FILLER ENGINE
     // =========================================================================
+    /**
+     * Cleans zero-width space characters (\u200B) injected internally by Swagger UI.
+     * @param {string} str
+     * @returns {string}
+     */
+    function cleanZeroWidth(str) {
+        if (!str || typeof str !== "string") return "";
+        return str.replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
+    }
+
+    /**
+     * Finds parent controller/tag DOM element in Swagger UI.
+     * @param {string} tag
+     * @returns {HTMLElement|null}
+     */
+    function findTagSection(tag) {
+        if (!tag) return null;
+        const normalizedTargetTag = cleanZeroWidth(tag).toLowerCase();
+
+        const byId = document.getElementById(`operations-tag-${tag}`);
+        if (byId) return byId.closest(".opblock-tag-section") || byId;
+
+        const byData = document.querySelector(`.opblock-tag-section [data-tag="${tag}"]`);
+        if (byData) return byData.closest(".opblock-tag-section") || byData;
+
+        const sections = document.querySelectorAll(".swagger-ui .opblock-tag-section, .opblock-tag-section");
+        for (const sec of sections) {
+            const tagHeader = sec.querySelector(".opblock-tag");
+            if (tagHeader) {
+                const rawText = tagHeader.getAttribute("data-tag") || tagHeader.textContent || "";
+                const headerText = cleanZeroWidth(rawText).toLowerCase();
+                if (headerText === normalizedTargetTag || headerText.startsWith(normalizedTargetTag)) {
+                    return sec;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Ensures the controller/tag section is open.
+     * @param {HTMLElement} tagSection
+     * @returns {boolean} True if clicked to open, False if already open
+     */
+    function ensureTagSectionOpen(tagSection) {
+        if (!tagSection) return false;
+        if (!tagSection.classList.contains("is-open")) {
+            const toggleElement = tagSection.querySelector(".opblock-tag")
+                               || tagSection.querySelector(".opblock-tag button")
+                               || tagSection.querySelector(".opblock-tag a");
+            if (toggleElement) {
+                toggleElement.click();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Locates the endpoint .opblock element in DOM via ID or method + path scan.
+     */
+    function findOpblockElement(method, specPath, operationId = "") {
+        const normMethod = (method || "").toLowerCase().trim();
+        const normPath = cleanZeroWidth(specPath).toLowerCase().trim();
+
+        if (operationId) {
+            const byOpId = document.querySelector(`[id*="-${operationId}"]`);
+            if (byOpId && byOpId.classList.contains("opblock")) return byOpId;
+        }
+
+        const opblocks = document.querySelectorAll(".swagger-ui .opblock, .opblock");
+        for (const block of opblocks) {
+            const methodEl = block.querySelector(".opblock-summary-method");
+            const pathEl = block.querySelector(".opblock-summary-path");
+            if (!methodEl || !pathEl) continue;
+
+            const m = methodEl.textContent.trim().toLowerCase();
+            const p = cleanZeroWidth(pathEl.getAttribute("data-path") || pathEl.textContent).toLowerCase().trim();
+
+            if (m === normMethod && (p === normPath || p.endsWith(normPath) || normPath.endsWith(p))) {
+                return block;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Ensures endpoint (.opblock) is expanded by clicking .opblock-summary-control.
+     */
+    function ensureOpblockOpen(opblock) {
+        if (!opblock) return;
+        if (!opblock.classList.contains("is-open")) {
+            const controlBtn = opblock.querySelector("button.opblock-summary-control")
+                            || opblock.querySelector(".opblock-summary button")
+                            || opblock.querySelector(".opblock-summary");
+            if (controlBtn) {
+                controlBtn.click();
+            }
+        }
+    }
+
     /**
      * Pre-fills a React-controlled HTML input or textarea element,
      * dispatching standard events so React state captures the new value.
@@ -572,99 +680,61 @@
     }
 
     /**
-     * Expands and pre-fills the matched Swagger UI operation block.
+     * Expands and pre-fills the matched Swagger UI operation block with robust asynchronous polling.
      * @param {Object} matchInfo
      * @param {Object} parsedCurl
      * @param {Object} options
-     * @returns {boolean} True if successfully navigated and filled
+     * @returns {boolean} True if successfully initiated
      */
     function populateSwaggerOperation(matchInfo, parsedCurl, options = {}) {
-        const { method, specPath, pathParams } = matchInfo;
+        const { method, specPath, tag, operationId, pathParams } = matchInfo;
         const { queryParams, headers, body, authHeader } = parsedCurl;
         const autoExecute = Boolean(options.autoExecute);
         const syncAuth = Boolean(options.syncAuth);
 
-        // 1. Locate the .opblock DOM element
-        let targetOpblock = null;
-        const opblocks = document.querySelectorAll(`.opblock.opblock-${method}`);
-        for (const block of opblocks) {
-            const pathEl = block.querySelector(".opblock-summary-path");
-            const blockPath = pathEl?.getAttribute("data-path") || pathEl?.textContent.trim();
-            if (blockPath === specPath) {
-                targetOpblock = block;
-                break;
+        // 1. Expand parent Tag Section if collapsed
+        let didOpenTag = false;
+        if (tag) {
+            const tagSection = findTagSection(tag);
+            if (tagSection) {
+                didOpenTag = ensureTagSectionOpen(tagSection);
             }
         }
 
-        if (!targetOpblock) {
-            console.warn(`[SwaggerCurlImporter] Could not find DOM block for ${method.toUpperCase()} ${specPath}`);
-            return false;
-        }
+        // 2. Poll for the .opblock to appear in DOM (especially if tag was just unfolded)
+        let opblockAttempts = 0;
+        const maxOpblockAttempts = didOpenTag ? 30 : 15;
 
-        // 2. Expand parent Tag Section if collapsed
-        const tagSection = targetOpblock.closest(".opblock-tag-section");
-        if (tagSection && !tagSection.classList.contains("is-open")) {
-            const tagHeader = tagSection.querySelector(".opblock-tag");
-            tagHeader?.click();
-        }
+        const pollOpblock = setInterval(() => {
+            opblockAttempts++;
+            const targetOpblock = findOpblockElement(method, specPath, operationId);
 
-        // 3. Expand the operation block if collapsed
-        if (!targetOpblock.classList.contains("is-open")) {
-            const summary = targetOpblock.querySelector(".opblock-summary");
-            summary?.click();
-        }
-
-        // Allow DOM to render opblock body
-        setTimeout(() => {
-            // 4. Activate "Try it out" if not active
-            const tryOutBtn = targetOpblock.querySelector(".btn.try-out__btn");
-            if (tryOutBtn && !tryOutBtn.classList.contains("cancel")) {
-                tryOutBtn.click();
+            if (!targetOpblock && opblockAttempts >= 6 && !didOpenTag) {
+                // If not found, try unfolding all closed tags as fallback
+                const collapsedTags = document.querySelectorAll(".swagger-ui .opblock-tag-section:not(.is-open)");
+                if (collapsedTags.length > 0) {
+                    collapsedTags.forEach(sec => ensureTagSectionOpen(sec));
+                    didOpenTag = true;
+                }
             }
 
+            if (targetOpblock) {
+                clearInterval(pollOpblock);
+                proceedWithOpblock(targetOpblock);
+            } else if (opblockAttempts >= maxOpblockAttempts) {
+                clearInterval(pollOpblock);
+                console.warn(`[SwaggerCurlImporter] Could not locate DOM block for ${method.toUpperCase()} ${specPath}`);
+            }
+        }, 40);
+
+        function proceedWithOpblock(targetOpblock) {
+            // 3. Expand the opblock if collapsed
+            ensureOpblockOpen(targetOpblock);
+
+            // 4. Smooth scroll and glow highlight
             setTimeout(() => {
-                // 5. Populate Parameters (Path, Query, Header)
-                const paramRows = targetOpblock.querySelectorAll(".parameters tr[data-param-name]");
-                paramRows.forEach(row => {
-                    const paramName = row.getAttribute("data-param-name");
-                    const input = row.querySelector("input:not([type='file'])");
-                    if (!input || !paramName) return;
-
-                    // A. Path Parameter
-                    if (pathParams[paramName] !== undefined) {
-                        setReactInputValue(input, pathParams[paramName]);
-                    }
-                    // B. Query Parameter
-                    else if (queryParams[paramName] !== undefined) {
-                        setReactInputValue(input, queryParams[paramName]);
-                    }
-                    // C. Header Parameter
-                    else if (headers[paramName.toLowerCase()] !== undefined) {
-                        setReactInputValue(input, headers[paramName.toLowerCase()]);
-                    }
-                });
-
-                // 6. Populate Request Body Textarea
-                if (body) {
-                    const bodyTextarea = targetOpblock.querySelector("textarea.body-param__text, .body-param textarea");
-                    if (bodyTextarea) {
-                        // Format JSON if valid
-                        let formattedBody = body;
-                        try {
-                            const parsedJson = JSON.parse(body);
-                            formattedBody = JSON.stringify(parsedJson, null, 2);
-                        } catch {}
-                        setReactInputValue(bodyTextarea, formattedBody);
-                    }
-                }
-
-                // 7. Synchronize Global Authorization if opted-in
-                if (syncAuth && authHeader && window.ui && typeof window.ui.authActions?.authorize === "function") {
-                    trySyncAuthorization(authHeader);
-                }
-
-                // 8. Smooth Scroll and Animated Highlight Glow
-                targetOpblock.scrollIntoView({ behavior: "smooth", block: "center" });
+                const headerElement = targetOpblock.querySelector(".opblock-summary") || targetOpblock;
+                headerElement.scrollIntoView({ behavior: "smooth", block: "center" });
 
                 if (CONFIG.ENABLE_GLOW) {
                     targetOpblock.classList.add("swp-curl-highlight-glow");
@@ -672,18 +742,86 @@
                         targetOpblock.classList.remove("swp-curl-highlight-glow");
                     }, CONFIG.GLOW_DURATION_MS);
                 }
+            }, 60);
 
-                // 9. Auto-Execute if opted-in
-                if (autoExecute) {
-                    setTimeout(() => {
-                        const executeBtn = targetOpblock.querySelector(".btn.execute");
-                        if (executeBtn) {
-                            executeBtn.click();
-                        }
-                    }, 200);
+            // 5. Poll for "Try it out" button and click it
+            let tryOutAttempts = 0;
+            const pollTryOut = setInterval(() => {
+                tryOutAttempts++;
+                const tryOutBtn = targetOpblock.querySelector(".btn.try-out__btn");
+
+                if (tryOutBtn) {
+                    clearInterval(pollTryOut);
+                    const isTryActive = tryOutBtn.classList.contains("cancel") ||
+                                        tryOutBtn.textContent.toLowerCase().includes("cancel");
+                    if (!isTryActive) {
+                        tryOutBtn.click();
+                    }
+                    // Wait for React to render input fields and body textarea
+                    pollAndFillInputs(targetOpblock);
+                } else if (tryOutAttempts >= 25) {
+                    clearInterval(pollTryOut);
+                    pollAndFillInputs(targetOpblock);
                 }
-            }, 120);
-        }, 120);
+            }, 40);
+        }
+
+        function pollAndFillInputs(targetOpblock) {
+            let fillAttempts = 0;
+            const pollInputs = setInterval(() => {
+                fillAttempts++;
+                const hasInputs = targetOpblock.querySelector(".parameters, .body-param, textarea, input:not([type='file'])");
+
+                if (hasInputs || fillAttempts >= 25) {
+                    clearInterval(pollInputs);
+
+                    // 6. Populate Parameters (Path, Query, Header)
+                    const paramRows = targetOpblock.querySelectorAll(".parameters tr[data-param-name]");
+                    paramRows.forEach(row => {
+                        const rawParamName = row.getAttribute("data-param-name");
+                        const paramName = cleanZeroWidth(rawParamName);
+                        const input = row.querySelector("input:not([type='file']), select, textarea");
+                        if (!input || !paramName) return;
+
+                        if (pathParams[paramName] !== undefined) {
+                            setReactInputValue(input, pathParams[paramName]);
+                        } else if (queryParams[paramName] !== undefined) {
+                            setReactInputValue(input, queryParams[paramName]);
+                        } else if (headers[paramName.toLowerCase()] !== undefined) {
+                            setReactInputValue(input, headers[paramName.toLowerCase()]);
+                        }
+                    });
+
+                    // 7. Populate Request Body Textarea
+                    if (body) {
+                        const bodyTextarea = targetOpblock.querySelector("textarea.body-param__text, .body-param textarea, textarea");
+                        if (bodyTextarea) {
+                            let formattedBody = body;
+                            try {
+                                const parsedJson = JSON.parse(body);
+                                formattedBody = JSON.stringify(parsedJson, null, 2);
+                            } catch {}
+                            setReactInputValue(bodyTextarea, formattedBody);
+                        }
+                    }
+
+                    // 8. Synchronize Global Authorization if opted-in
+                    if (syncAuth && authHeader && window.ui && typeof window.ui.authActions?.authorize === "function") {
+                        trySyncAuthorization(authHeader);
+                    }
+
+                    // 9. Auto-Execute if opted-in
+                    if (autoExecute) {
+                        setTimeout(() => {
+                            const executeBtn = targetOpblock.querySelector(".btn.execute");
+                            if (executeBtn) {
+                                executeBtn.click();
+                            }
+                        }, 250);
+                    }
+                }
+            }, 40);
+        }
 
         return true;
     }

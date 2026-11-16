@@ -183,6 +183,11 @@
             .replace(/'/g, "&#039;");
     }
 
+    function cleanZeroWidth(str) {
+        if (!str || typeof str !== "string") return "";
+        return str.replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
+    }
+
     function formatBytes(bytes) {
         if (bytes < 1024) return `${bytes} B`;
         if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -1126,7 +1131,7 @@
             const methodEl = opblock.querySelector(".opblock-summary-method");
             const pathEl = opblock.querySelector(".opblock-summary-path");
             const method = methodEl?.textContent.trim().toLowerCase();
-            const path = pathEl?.getAttribute("data-path") || pathEl?.textContent.trim();
+            const path = cleanZeroWidth(pathEl?.getAttribute("data-path") || pathEl?.textContent);
 
             if (method && path && spec.paths[path] && spec.paths[path][method]) {
                 const op = spec.paths[path][method];
@@ -1165,7 +1170,7 @@
         const methodEl = opblock.querySelector(".opblock-summary-method");
         const pathEl = opblock.querySelector(".opblock-summary-path");
         const method = methodEl?.textContent.trim().toUpperCase() || "GET";
-        let rawPath = pathEl?.getAttribute("data-path") || pathEl?.textContent.trim() || "/";
+        let rawPath = cleanZeroWidth(pathEl?.getAttribute("data-path") || pathEl?.textContent || "/");
 
         // Read path parameters and query parameters from inputs
         const headers = {};
@@ -1173,7 +1178,7 @@
 
         const paramRows = opblock.querySelectorAll(".parameters tr[data-param-name]");
         paramRows.forEach(row => {
-            const paramName = row.getAttribute("data-param-name");
+            const paramName = cleanZeroWidth(row.getAttribute("data-param-name") || "");
             const input = row.querySelector("input, select, textarea");
             const val = input?.value || "";
             if (!val || !paramName) return;
