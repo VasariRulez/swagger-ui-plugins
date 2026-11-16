@@ -404,16 +404,24 @@
             }
         }
 
-        // Set default Accept header for SSE / NDJSON if absent
+        // Set default Accept and Cache-Control headers for SSE / NDJSON if absent
         const hasAccept = Object.keys(streamState.headers).some(k => k.toLowerCase() === "accept");
         if (!hasAccept) {
             streamState.headers["Accept"] = "text/event-stream, application/x-ndjson, */*";
+        }
+        if (!streamState.headers["Cache-Control"]) {
+            streamState.headers["Cache-Control"] = "no-cache";
+        }
+        if (!streamState.headers["Pragma"]) {
+            streamState.headers["Pragma"] = "no-cache";
         }
 
         streamState.abortController = new AbortController();
         setStreamStatus("connecting");
         resetMetrics();
         startTimer();
+
+        console.info(`[SwaggerStreamInspector] Connecting to: ${streamState.method} ${streamState.url}`, streamState.headers);
 
         try {
             const fetchOptions = {
@@ -427,6 +435,10 @@
             }
 
             const response = await fetch(streamState.url, fetchOptions);
+
+            console.info(`[SwaggerStreamInspector] Connected! HTTP ${response.status} ${response.statusText}`, {
+                contentType: response.headers.get("content-type")
+            });
 
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status} ${response.statusText}`);
@@ -450,11 +462,16 @@
 
             while (true) {
                 const { done, value } = await reader.read();
-                if (done) break;
+                if (done) {
+                    console.info("[SwaggerStreamInspector] Stream read complete (done: true)");
+                    break;
+                }
 
                 const chunkText = decoder.decode(value, { stream: true });
                 const chunkBytes = value.byteLength || chunkText.length;
                 updateByteStats(chunkBytes);
+
+                console.debug(`[SwaggerStreamInspector] Received chunk (${chunkBytes} bytes):`, chunkText);
 
                 buffer += chunkText;
 
@@ -567,6 +584,12 @@
                 case "retry":
                     currentEvent.retry = parseInt(value, 10);
                     break;
+                default:
+                    // Fallback for lines without standard SSE field prefix (e.g. raw JSON chunks)
+                    if (line.trim()) {
+                        currentEvent.data = currentEvent.data ? currentEvent.data + "\n" + line : line;
+                    }
+                    break;
             }
         }
 
@@ -620,6 +643,8 @@
             sizeBytes: new Blob([eventObj.data || ""]).size,
             ...eventObj
         };
+
+        console.info(`[SwaggerStreamInspector] Event #${enriched.index} [${enriched.event}]:`, enriched.data);
 
         streamState.events.push(enriched);
         if (streamState.events.length > CONFIG.MAX_STORED_EVENTS) {
